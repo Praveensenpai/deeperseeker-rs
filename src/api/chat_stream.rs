@@ -36,59 +36,90 @@ struct StreamState {
 
 pub async fn handle_streaming_response(
     state: &AppState,
-    model: String,
+    req: crate::domain::openai::ChatCompletionRequest,
     token_id: i64,
     session_id: String,
     parent_id: i64,
-    req_messages: Vec<ChatMessage>,
     upstream_resp: reqwest::Response,
 ) -> Result<Response, (StatusCode, String)> {
     let chat_id = format!("chatcmpl-{}", Uuid::new_v4());
     let created = current_timestamp();
     let db = state.db.clone();
+    let state = state.clone();
 
-    let prompt_chars: usize = req_messages.iter().map(|m| m.text_content().len()).sum();
+    let prompt_chars: usize = req.messages.iter().map(|m| m.text_content().len()).sum();
     let prompt_tokens = std::cmp::max(1, (prompt_chars / 4) as u32);
-    let byte_stream = upstream_resp.bytes_stream();
 
     let sse_stream = async_stream::stream! {
-        let mut byte_stream = byte_stream;
-        let mut buffer = String::new();
-        let mut think_open = false;
-        let mut stream_state = StreamState::default();
-        let ctx = StreamContext { chat_id: &chat_id, created, model: &model };
+        let mut cur_resp = upstream_resp;
+        let mut cur_sess = session_id;
+        let mut cur_parent = parent_id;
+        let mut cur_tok = token_id;
+        let ctx = StreamContext { chat_id: &chat_id, created, model: &req.model };
 
-        'outer: while let Some(chunk_res) = byte_stream.next().await {
-            let Ok(bytes) = chunk_res else {
-                tracing::warn!("Upstream stream dropped mid-generation");
-                break 'outer;
-            };
-            for line in drain_sse_lines(&mut buffer, &bytes) {
-                match parse_sse_line(&line, &mut think_open) {
-                    SseLineResult::Done => break 'outer,
-                    SseLineResult::Error(code, msg) => {
-                        tracing::warn!("Upstream error in SSE stream (code {code}): {msg}");
-                        stream_state.upstream_error = Some(msg);
-                        break 'outer;
-                    }
-                    SseLineResult::Chunks(chunks) => {
-                        for out in process_chunks(chunks, &ctx, &mut stream_state) {
-                            yield Ok::<_, std::convert::Infallible>(out);
+        for attempt in 0..2 {
+            let mut byte_stream = cur_resp.bytes_stream();
+            let mut buffer = String::new();
+            let mut think_open = false;
+            let mut stream_state = StreamState::default();
+
+            'outer: while let Some(chunk_res) = byte_stream.next().await {
+                let Ok(bytes) = chunk_res else {
+                    tracing::warn!("Upstream stream dropped mid-generation");
+                    break 'outer;
+                };
+                for line in drain_sse_lines(&mut buffer, &bytes) {
+                    match parse_sse_line(&line, &mut think_open) {
+                        SseLineResult::Done => break 'outer,
+                        SseLineResult::Error(code, msg) => {
+                            tracing::warn!("Upstream error in SSE stream (code {code}): {msg}");
+                            stream_state.upstream_error = Some(msg);
+                            break 'outer;
                         }
+                        SseLineResult::Chunks(chunks) => {
+                            for out in process_chunks(chunks, &ctx, &mut stream_state) {
+                                yield Ok::<_, std::convert::Infallible>(out);
+                            }
+                        }
+                        SseLineResult::None => {}
                     }
-                    SseLineResult::None => {}
                 }
             }
-        }
 
-        let parsed = parse_dsml(&stream_state.full_content);
-        if let Some(final_chunk) = emit_final_tool_or_text(&ctx, &parsed, &stream_state) {
-            yield Ok(final_chunk);
-        }
+            let parsed = parse_dsml(&stream_state.full_content);
+            if let Some(final_chunk) = emit_final_tool_or_text(&ctx, &parsed, &stream_state) {
+                yield Ok(final_chunk);
+            }
 
-        if stream_state.full_content.is_empty() && parsed.tool_calls.is_empty() {
-            tracing::warn!("Empty stream generation for session {session_id}; deleting stale session");
-            let _ = crate::infra::db::delete_sessions_for_chat(&db, token_id, &session_id).await;
+            if !stream_state.full_content.is_empty() || !parsed.tool_calls.is_empty() {
+                let ids = (cur_tok, cur_sess, cur_parent, prompt_tokens, stream_state.full_content.len());
+                if let Some(term) = finalize_stream_session(&db, &req.messages, &ctx, &parsed, ids).await {
+                    yield Ok(format!("data: {term}\n\n"));
+                }
+                yield Ok("data: [DONE]\n\n".to_string());
+                return;
+            }
+
+            if attempt == 0 && cur_parent != 0 {
+                tracing::warn!("Resumed stream produced 0 tokens; auto-recovering with fresh upstream session...");
+                let _ = crate::infra::db::delete_sessions_for_chat(&db, cur_tok, &cur_sess).await;
+                tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+
+                if let Ok(fresh_prep) = crate::api::chat::create_fresh_session(&state, &req, &[]).await {
+                    if let Ok(comp_args) = crate::api::chat::prepare_completion_args(&state, &req, &fresh_prep).await {
+                        if let Ok(new_resp) = state.client.send_completion_request(comp_args).await {
+                            cur_sess = fresh_prep.session_id;
+                            cur_parent = 0;
+                            cur_tok = fresh_prep.token.id;
+                            cur_resp = new_resp;
+                            continue;
+                        }
+                    }
+                }
+            }
+
+            tracing::warn!("Empty stream generation for session {cur_sess}; deleting stale session");
+            let _ = crate::infra::db::delete_sessions_for_chat(&db, cur_tok, &cur_sess).await;
             let err_msg = stream_state
                 .upstream_error
                 .unwrap_or_else(|| "DeepSeek returned empty completion".to_string());
@@ -99,12 +130,6 @@ pub async fn handle_streaming_response(
             yield Ok("data: [DONE]\n\n".to_string());
             return;
         }
-
-        let ids = (token_id, session_id, parent_id, prompt_tokens, stream_state.full_content.len());
-        if let Some(term) = finalize_stream_session(&db, &req_messages, &ctx, &parsed, ids).await {
-            yield Ok(format!("data: {term}\n\n"));
-        }
-        yield Ok("data: [DONE]\n\n".to_string());
     };
 
     Ok(Response::builder()
@@ -210,7 +235,8 @@ async fn save_stream_session(
     let tools = (!parsed.tool_calls.is_empty()).then_some(parsed.tool_calls.as_slice());
     let sig = compute_next_signature(messages, model, &parsed.text_content, tools);
     let next_parent = next_parent_id(parent_id);
-    let sess = Session::new(token_id, session_id.clone(), next_parent, 0.0);
+    let now = crate::infra::db::now_timestamp();
+    let sess = Session::new(token_id, session_id.clone(), next_parent, now);
     tracing::info!(
         "Saved session {} (next_parent: {next_parent}) for sig {}",
         &session_id[..8.min(session_id.len())],

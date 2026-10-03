@@ -42,16 +42,16 @@ pub async fn chat_completions(
 }
 
 #[derive(Debug)]
-enum AttemptError {
+pub(crate) enum AttemptError {
     RateLimited(i64),
     Fatal(StatusCode, String),
 }
 
-struct PreparedSession {
-    token: Token,
-    session_id: String,
-    parent_id: i64,
-    is_first: bool,
+pub(crate) struct PreparedSession {
+    pub token: Token,
+    pub session_id: String,
+    pub parent_id: i64,
+    pub is_first: bool,
 }
 
 async fn execute_completion_attempt(
@@ -134,8 +134,8 @@ async fn try_resume_session(
     }
 
     let elapsed = crate::infra::db::now_timestamp() - sess.last_used;
-    if elapsed < 0.35 {
-        tokio::time::sleep(std::time::Duration::from_millis(((0.35 - elapsed) * 1000.0) as u64)).await;
+    if elapsed < 0.75 {
+        tokio::time::sleep(std::time::Duration::from_millis(((0.75 - elapsed) * 1000.0) as u64)).await;
     }
 
     tracing::info!(
@@ -153,7 +153,7 @@ async fn try_resume_session(
     }))
 }
 
-async fn create_fresh_session(
+pub(crate) async fn create_fresh_session(
     state: &AppState,
     _req: &ChatCompletionRequest,
     exclude: &[i64],
@@ -209,11 +209,10 @@ async fn run_chat_request(
     if req.stream {
         handle_streaming_response(
             state,
-            req.model.clone(),
+            req.clone(),
             prep.token.id,
             prep.session_id.clone(),
             prep.parent_id,
-            req.messages.clone(),
             resp,
         )
         .await
@@ -233,7 +232,7 @@ async fn run_chat_request(
     }
 }
 
-async fn prepare_completion_args(
+pub(crate) async fn prepare_completion_args(
     state: &AppState,
     req: &ChatCompletionRequest,
     prep: &PreparedSession,
