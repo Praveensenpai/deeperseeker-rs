@@ -52,7 +52,10 @@ pub fn build_router(state: AppState) -> Router {
     Router::new()
         .merge(api_routes)
         .merge(public_routes)
-        .nest_service("/static", ServeDir::new("static"))
+        .nest_service(
+            "/static",
+            ServeDir::new(crate::infra::assets::resolve_asset_dir("static")),
+        )
         .layer(CorsLayer::permissive())
         .with_state(state)
 }

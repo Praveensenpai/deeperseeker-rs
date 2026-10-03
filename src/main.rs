@@ -84,9 +84,8 @@ async fn run_server(args: ServeArgs) -> Result<()> {
     );
 
     let client = DeepSeekClient::new();
-    let tera = Arc::new(
-        Tera::new("templates/**/*").context("Failed compiling HTML templates from templates/")?,
-    );
+    let template_pattern = deeperseeker::infra::assets::resolve_templates_pattern();
+    let tera = Arc::new(Tera::new(&template_pattern).context("Failed compiling HTML templates")?);
 
     let in_flight = Arc::new(Mutex::new(HashMap::new()));
     let state = AppState {

@@ -1,3 +1,4 @@
+pub mod assets;
 pub mod db;
 pub mod deepseek_client;
 pub mod pow;

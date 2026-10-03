@@ -12,9 +12,10 @@ pub struct PowSolver {
 
 impl PowSolver {
     pub fn new(wasm_path: &str) -> Result<Self> {
+        let resolved = crate::infra::assets::resolve_wasm_path(wasm_path);
         let engine = Engine::default();
-        let module = Module::from_file(&engine, wasm_path)
-            .with_context(|| format!("Failed to load WASM file from {wasm_path}"))?;
+        let module = Module::from_file(&engine, &resolved)
+            .with_context(|| format!("Failed to load WASM file from {resolved}"))?;
         Ok(Self {
             engine,
             module: Arc::new(module),

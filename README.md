@@ -27,11 +27,10 @@
 
 ### 🪄 One-Liner Magic (Pre-Built Linux x86_64 Binary)
 
-Download and unpack the latest release without needing the Rust toolchain:
+Install `deeperseeker` in seconds with automatic path and asset setup:
 
 ```bash
-curl -fsSL https://github.com/Praveensenpai/deeperseeker-rs/releases/download/v0.2.0/deeperseeker-x86_64-linux.tar.gz | tar -xz
-./deeperseeker --help
+curl -fsSL https://raw.githubusercontent.com/Praveensenpai/deeperseeker-rs/main/install.sh | bash
 ```
 
 ### 🛠️ Build from Source

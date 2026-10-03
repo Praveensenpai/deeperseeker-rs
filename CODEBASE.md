@@ -115,7 +115,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn get_usage_metrics (State (state) : State < AppState >) -> impl IntoResponse
   ```
 
-### `src/api.rs` (Role: api, Lines: 58)
+### `src/api.rs` (Role: api, Lines: 61)
 - **Responsibility**: Core api logic in src/api.rs
 - **Imports**: use crate :: api :: anthropic :: anthropic_messages , use crate :: api :: chat :: chat_completions , use crate :: api :: dashboard :: { add_token , delete_token , logout , show_dashboard , show_login , submit_login , } , use crate :: api :: files :: { upload_file_anthropic , upload_file_openai } , use crate :: api :: health :: { health , root } , use crate :: api :: middleware :: require_api_key , use crate :: api :: models :: list_models , use crate :: api :: state :: AppState , use crate :: api :: usage :: get_usage_metrics , use axum :: { middleware :: from_fn_with_state , routing :: { get , post } , Router , } , use tower_http :: cors :: CorsLayer , use tower_http :: services :: ServeDir 
 - **Public Functions & Signatures**:
@@ -294,6 +294,16 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
 ### `src/domain.rs` (Role: domain, Lines: 6)
 - **Responsibility**: Core domain logic in src/domain.rs
 
+### `src/infra/assets.rs` (Role: infra, Lines: 39)
+- **Responsibility**: Core infra logic in src/infra/assets.rs
+- **Imports**: use std :: path :: { Path , PathBuf } 
+- **Public Functions & Signatures**:
+  ```rust
+  fn resolve_asset_dir (relative : & str) -> PathBuf
+  fn resolve_templates_pattern () -> String
+  fn resolve_wasm_path (default_rel : & str) -> String
+  ```
+
 ### `src/infra/db.rs` (Role: infra, Lines: 356)
 - **Responsibility**: Core infra logic in src/infra/db.rs
 - **Imports**: use crate :: domain :: session :: Session , use crate :: domain :: token :: Token , use anyhow :: { Context , Result } , use rusqlite :: params , use std :: collections :: HashMap , use std :: time :: { SystemTime , UNIX_EPOCH } , use tokio_rusqlite :: Connection 
@@ -336,7 +346,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn download_file (& self , token : & str , file_id : & str) -> Result < Vec < u8 > >
   ```
 
-### `src/infra/pow.rs` (Role: infra, Lines: 94)
+### `src/infra/pow.rs` (Role: infra, Lines: 95)
 - **Responsibility**: Core infra logic in src/infra/pow.rs
 - **Imports**: use crate :: domain :: upstream :: { PowChallenge , PowSolution } , use anyhow :: { anyhow , Context , Result } , use base64 :: { engine :: general_purpose :: STANDARD as B64 , Engine as _ } , use std :: sync :: Arc , use wasmtime :: { Engine , Instance , Module , Store } 
 - **Types & Enums**:
@@ -391,17 +401,17 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn get_model_breakdown (conn : & Connection) -> Result < Vec < ModelUsage > >
   ```
 
-### `src/infra.rs` (Role: infra, Lines: 7)
+### `src/infra.rs` (Role: infra, Lines: 8)
 - **Responsibility**: Core infra logic in src/infra.rs
 
 ### `src/lib.rs` (Role: general, Lines: 6)
 - **Responsibility**: Core general logic in src/lib.rs
 
-### `src/main.rs` (Role: general, Lines: 116)
+### `src/main.rs` (Role: general, Lines: 115)
 - **Responsibility**: Core general logic in src/main.rs
 - **Imports**: use anyhow :: { Context , Result } , use clap :: Parser , use deeperseeker :: api :: build_router , use deeperseeker :: api :: state :: AppState , use deeperseeker :: cli :: diagnostic :: run_diagnostics , use deeperseeker :: cli :: service :: { install_user_service , service_status , uninstall_user_service } , use deeperseeker :: cli :: token_cmd :: { add_token , list_tokens , remove_token , test_tokens } , use deeperseeker :: cli :: usage_cmd :: display_usage , use deeperseeker :: cli :: { Cli , Commands , ServeArgs , ServiceArgs , ServiceSubcommands , TokenArgs , TokenSubcommands , } , use deeperseeker :: config :: AppConfig , use deeperseeker :: infra :: db :: { init_db , open_db } , use deeperseeker :: infra :: deepseek_client :: DeepSeekClient , use deeperseeker :: infra :: pow :: PowSolver , use deeperseeker :: tui :: run_status , use std :: collections :: HashMap , use std :: sync :: Arc , use tera :: Tera , use tokio :: net :: TcpListener , use tokio :: sync :: Mutex , use tracing :: info 
 
-### `src/tui/tabs.rs` (Role: tui, Lines: 261)
+### `src/tui/tabs.rs` (Role: tui, Lines: 264)
 - **Responsibility**: Core tui logic in src/tui/tabs.rs
 - **Imports**: use crate :: domain :: token :: Token , use crate :: domain :: usage :: { format_metric , UsageSummary } , use crate :: tui :: views :: RenderState , use ratatui :: { layout :: { Constraint , Direction , Layout , Rect } , style :: { Color , Modifier , Style } , text :: { Line , Span } , widgets :: { Block , BorderType , Borders , Cell , Gauge , Paragraph , Row , Table , Wrap } , Frame , } 
 - **Public Functions & Signatures**:
