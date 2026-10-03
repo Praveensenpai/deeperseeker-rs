@@ -69,11 +69,23 @@ fn build_first_turn_prompt(messages: &[ChatMessage], tools: Option<&[Value]>) ->
     if let Some(last) = messages.last() {
         if last.role != "system" {
             let text = last.content.as_text();
-            prompt.push_str(&format!("[USER]\n{}\n\n", text.trim()));
+            let prompt_text = if text.trim().is_empty() && has_media_attachments(last) {
+                "Please analyze the attached image."
+            } else {
+                text.trim()
+            };
+            prompt.push_str(&format!("[USER]\n{}\n\n", prompt_text));
         }
     }
 
     prompt.trim().to_string()
+}
+
+fn has_media_attachments(msg: &ChatMessage) -> bool {
+    let crate::domain::openai::MessageContent::Parts(parts) = &msg.content else {
+        return false;
+    };
+    parts.iter().any(|p| p.image_url.is_some() || p.file.is_some())
 }
 
 fn extract_system_prompt(messages: &[ChatMessage], has_tools: bool) -> Option<String> {

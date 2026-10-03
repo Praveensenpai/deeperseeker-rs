@@ -15,17 +15,17 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
 
 ## 3. Module & Interface Skeleton
 
-### `src/api/anthropic.rs` (Role: api, Lines: 114)
+### `src/api/anthropic.rs` (Role: api, Lines: 154)
 - **Responsibility**: Core api logic in src/api/anthropic.rs
-- **Imports**: use crate :: api :: chat :: chat_completions , use crate :: api :: state :: AppState , use crate :: domain :: anthropic :: { AnthropicBlock , AnthropicContent , AnthropicMessage , AnthropicMessageRequest , AnthropicMessageResponse , AnthropicUsage , } , use crate :: domain :: openai :: { ChatCompletionRequest , ChatCompletionResponse , ChatMessage } , use axum :: { extract :: State , http :: StatusCode , response :: { IntoResponse , Response } , Json , } , use serde_json :: json 
+- **Imports**: use crate :: api :: chat :: chat_completions , use crate :: api :: state :: AppState , use crate :: domain :: anthropic :: { AnthropicBlock , AnthropicContent , AnthropicMessage , AnthropicMessageRequest , AnthropicMessageResponse , AnthropicUsage , } , use crate :: domain :: openai :: { ChatCompletionRequest , ChatCompletionResponse , ChatMessage , ContentPart , ImageUrl , MessageContent , } , use axum :: { extract :: State , http :: StatusCode , response :: { IntoResponse , Response } , Json , } , use serde_json :: json 
 - **Public Functions & Signatures**:
   ```rust
   async fn anthropic_messages (State (state) : State < AppState > , Json (req) : Json < AnthropicMessageRequest > ,) -> Result < Response , (StatusCode , Json < serde_json :: Value >) >
   ```
 
-### `src/api/chat.rs` (Role: api, Lines: 265)
+### `src/api/chat.rs` (Role: api, Lines: 245)
 - **Responsibility**: Core api logic in src/api/chat.rs
-- **Imports**: use crate :: api :: chat_stream :: { handle_streaming_response , handle_unary_response } , use crate :: api :: state :: AppState , use crate :: domain :: openai :: ChatCompletionRequest , use crate :: domain :: session :: compute_signature , use crate :: domain :: token :: Token , use crate :: infra :: db :: { find_session , mark_active , mark_limited , pick_token , touch_token } , use crate :: infra :: deepseek_client :: CompletionArgs , use crate :: infra :: prompt :: build_prompt_for_turn , use crate :: infra :: rehome :: rehome_foreign_files , use axum :: { extract :: State , http :: StatusCode , response :: Response , Json } , use serde_json :: json 
+- **Imports**: use crate :: api :: chat_stream :: { handle_streaming_response , handle_unary_response } , use crate :: api :: state :: AppState , use crate :: domain :: openai :: ChatCompletionRequest , use crate :: domain :: session :: compute_signature , use crate :: domain :: token :: Token , use crate :: infra :: db :: { find_session , mark_active , mark_limited , pick_token , touch_token } , use crate :: infra :: deepseek_client :: CompletionArgs , use crate :: infra :: media :: { resolve_message_media , MediaContext } , use crate :: infra :: prompt :: build_prompt_for_turn , use axum :: { extract :: State , http :: StatusCode , response :: Response , Json } , use serde_json :: json 
 - **Public Functions & Signatures**:
   ```rust
   async fn chat_completions (State (state) : State < AppState > , Json (req) : Json < ChatCompletionRequest > ,) -> Result < Response , (StatusCode , Json < serde_json :: Value >) >
@@ -216,7 +216,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn from_env () -> Self
   ```
 
-### `src/domain/anthropic.rs` (Role: domain, Lines: 54)
+### `src/domain/anthropic.rs` (Role: domain, Lines: 63)
 - **Responsibility**: Core domain logic in src/domain/anthropic.rs
 - **Imports**: use serde :: { Deserialize , Serialize } 
 - **Types & Enums**:
@@ -225,6 +225,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   pub struct AnthropicMessage
   pub enum AnthropicContent
   pub struct AnthropicBlock
+  pub struct AnthropicImageSource
   pub struct AnthropicMessageResponse
   pub struct AnthropicUsage
   ```
@@ -363,7 +364,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn get_file_token (conn : & Connection , file_id : & str) -> Result < Option < i64 > >
   ```
 
-### `src/infra/deepseek_client.rs` (Role: infra, Lines: 236)
+### `src/infra/deepseek_client.rs` (Role: infra, Lines: 254)
 - **Responsibility**: Core infra logic in src/infra/deepseek_client.rs
 - **Imports**: use crate :: domain :: upstream :: { CreateChatResponse , PowChallenge , PowChallengeWrapper } , use anyhow :: { anyhow , Context , Result } , use reqwest :: header :: { HeaderMap , HeaderValue , AUTHORIZATION , CONTENT_TYPE , USER_AGENT } , use reqwest :: Client , use serde_json :: json 
 - **Types & Enums**:
@@ -380,6 +381,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn send_completion_request (& self , args : CompletionArgs) -> Result < reqwest :: Response >
   async fn upload_file (& self , token : & str , pow_resp : & str , filename : & str , content_type : & str , bytes : Vec < u8 > ,) -> Result < String >
   async fn download_file (& self , token : & str , file_id : & str) -> Result < Vec < u8 > >
+  async fn fetch_bytes (& self , url : & str) -> Result < Vec < u8 > >
   ```
 
 ### `src/infra/dsml.rs` (Role: infra, Lines: 365)
@@ -396,6 +398,21 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn parse_dsml (text : & str) -> ParsedDsml
   ```
 
+### `src/infra/media.rs` (Role: infra, Lines: 204)
+- **Responsibility**: Core infra logic in src/infra/media.rs
+- **Imports**: use crate :: domain :: openai :: { ChatMessage , MessageContent } , use crate :: infra :: db :: record_file , use crate :: infra :: deepseek_client :: DeepSeekClient , use crate :: infra :: pow :: PowSolver , use crate :: infra :: rehome :: rehome_foreign_files , use anyhow :: { anyhow , Context , Result } , use base64 :: { engine :: general_purpose :: STANDARD as B64 , Engine as _ } , use std :: sync :: Arc , use tokio_rusqlite :: Connection 
+- **Types & Enums**:
+  ```rust
+  pub struct MediaContext
+  pub struct DecodedImage
+  ```
+- **Public Functions & Signatures**:
+  ```rust
+  async fn resolve_message_media (ctx : & MediaContext < '_ > , messages : & [ChatMessage] ,) -> Result < Vec < String > >
+  async fn parse_image_source (client : & DeepSeekClient , url : & str) -> Result < DecodedImage >
+  fn detect_image_format (bytes : & [u8]) -> (& 'static str , & 'static str)
+  ```
+
 ### `src/infra/pow.rs` (Role: infra, Lines: 95)
 - **Responsibility**: Core infra logic in src/infra/pow.rs
 - **Imports**: use crate :: domain :: upstream :: { PowChallenge , PowSolution } , use anyhow :: { anyhow , Context , Result } , use base64 :: { engine :: general_purpose :: STANDARD as B64 , Engine as _ } , use std :: sync :: Arc , use wasmtime :: { Engine , Instance , Module , Store } 
@@ -409,7 +426,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn solve (& self , challenge : & PowChallenge , target_path : & str) -> Result < String >
   ```
 
-### `src/infra/prompt.rs` (Role: infra, Lines: 162)
+### `src/infra/prompt.rs` (Role: infra, Lines: 174)
 - **Responsibility**: Core infra logic in src/infra/prompt.rs
 - **Imports**: use crate :: domain :: openai :: ChatMessage , use serde_json :: Value 
 - **Public Functions & Signatures**:
@@ -464,7 +481,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn start_token_watchdog (conn : Connection , interval : Duration) -> tokio :: task :: JoinHandle < () >
   ```
 
-### `src/infra.rs` (Role: infra, Lines: 10)
+### `src/infra.rs` (Role: infra, Lines: 11)
 - **Responsibility**: Core infra logic in src/infra.rs
 
 ### `src/lib.rs` (Role: general, Lines: 6)

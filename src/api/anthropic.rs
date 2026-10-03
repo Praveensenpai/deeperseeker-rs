@@ -4,7 +4,10 @@ use crate::domain::anthropic::{
     AnthropicBlock, AnthropicContent, AnthropicMessage, AnthropicMessageRequest,
     AnthropicMessageResponse, AnthropicUsage,
 };
-use crate::domain::openai::{ChatCompletionRequest, ChatCompletionResponse, ChatMessage};
+use crate::domain::openai::{
+    ChatCompletionRequest, ChatCompletionResponse, ChatMessage, ContentPart, ImageUrl,
+    MessageContent,
+};
 use axum::{
     extract::State,
     http::StatusCode,
@@ -50,22 +53,58 @@ fn convert_to_chat_messages(
     }
 
     for m in anthropic_msgs {
-        let text = extract_content_text(m.content);
-        messages.push(ChatMessage::new(m.role, text));
+        let content = convert_anthropic_content(m.content);
+        messages.push(ChatMessage {
+            role: m.role,
+            content,
+            name: None,
+            tool_calls: None,
+            tool_call_id: None,
+        });
     }
 
     messages
 }
 
-fn extract_content_text(content: AnthropicContent) -> String {
+fn convert_anthropic_content(content: AnthropicContent) -> MessageContent {
     match content {
-        AnthropicContent::Text(t) => t,
-        AnthropicContent::Blocks(blocks) => blocks
-            .into_iter()
-            .filter_map(|b| b.text)
-            .collect::<Vec<_>>()
-            .join(""),
+        AnthropicContent::Text(t) => MessageContent::Text(t),
+        AnthropicContent::Blocks(blocks) => {
+            let parts: Vec<ContentPart> = blocks
+                .into_iter()
+                .filter_map(convert_anthropic_block)
+                .collect();
+            if parts.is_empty() {
+                MessageContent::None
+            } else {
+                MessageContent::Parts(parts)
+            }
+        }
     }
+}
+
+fn convert_anthropic_block(b: AnthropicBlock) -> Option<ContentPart> {
+    if b.r#type == "text" {
+        return b.text.map(|t| ContentPart {
+            r#type: "text".to_string(),
+            text: Some(t),
+            image_url: None,
+            file: None,
+        });
+    }
+
+    if b.r#type == "image" {
+        return b.source.map(|src| ContentPart {
+            r#type: "image_url".to_string(),
+            text: None,
+            image_url: Some(ImageUrl {
+                url: format!("data:{};base64,{}", src.media_type, src.data),
+            }),
+            file: None,
+        });
+    }
+
+    None
 }
 
 async fn parse_anthropic_unary_response(
@@ -101,6 +140,7 @@ async fn parse_anthropic_unary_response(
         content: vec![AnthropicBlock {
             r#type: "text".to_string(),
             text: Some(text_content),
+            source: None,
         }],
         model,
         stop_reason: Some("end_turn".to_string()),

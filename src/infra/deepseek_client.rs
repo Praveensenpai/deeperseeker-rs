@@ -233,4 +233,22 @@ impl DeepSeekClient {
         let bytes = resp.bytes().await?;
         Ok(bytes.to_vec())
     }
+
+    pub async fn fetch_bytes(&self, url: &str) -> Result<Vec<u8>> {
+        let resp = self
+            .client
+            .get(url)
+            .send()
+            .await
+            .context("Failed fetching remote URL")?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            return Err(anyhow!("Remote URL HTTP {status}"));
+        }
+
+        let bytes = resp.bytes().await.context("Failed reading response bytes")?;
+        Ok(bytes.to_vec())
+    }
 }
+

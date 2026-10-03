@@ -5,8 +5,8 @@ use crate::domain::session::compute_signature;
 use crate::domain::token::Token;
 use crate::infra::db::{find_session, mark_active, mark_limited, pick_token, touch_token};
 use crate::infra::deepseek_client::CompletionArgs;
+use crate::infra::media::{resolve_message_media, MediaContext};
 use crate::infra::prompt::build_prompt_for_turn;
-use crate::infra::rehome::rehome_foreign_files;
 use axum::{extract::State, http::StatusCode, response::Response, Json};
 use serde_json::json;
 
@@ -213,17 +213,16 @@ async fn prepare_completion_args(
         .solve(&challenge, target_path)
         .map_err(|e| AttemptError::Fatal(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    let file_ids = extract_file_ids(&req.messages);
-    let ref_file_ids = rehome_foreign_files(
-        &state.db,
-        &state.client,
-        &state.pow_solver,
-        &file_ids,
-        prep.token.id,
-        &prep.token.token,
-    )
-    .await
-    .unwrap_or(file_ids);
+    let media_ctx = MediaContext {
+        db: &state.db,
+        client: &state.client,
+        solver: &state.pow_solver,
+        token_id: prep.token.id,
+        token: &prep.token.token,
+    };
+    let ref_file_ids = resolve_message_media(&media_ctx, &req.messages)
+        .await
+        .map_err(|e| AttemptError::Fatal(StatusCode::BAD_REQUEST, e.to_string()))?;
 
     let parent_msg_id = if prep.parent_id == 0 {
         None
@@ -243,23 +242,4 @@ async fn prepare_completion_args(
         thinking_enabled,
         search_enabled: false,
     })
-}
-
-fn extract_file_ids(messages: &[crate::domain::openai::ChatMessage]) -> Vec<String> {
-    let mut file_ids = Vec::new();
-    for msg in messages {
-        extract_msg_file_ids(msg, &mut file_ids);
-    }
-    file_ids
-}
-
-fn extract_msg_file_ids(msg: &crate::domain::openai::ChatMessage, file_ids: &mut Vec<String>) {
-    let crate::domain::openai::MessageContent::Parts(parts) = &msg.content else {
-        return;
-    };
-    for part in parts {
-        if let Some(f) = &part.file {
-            file_ids.push(f.file_id.clone());
-        }
-    }
 }

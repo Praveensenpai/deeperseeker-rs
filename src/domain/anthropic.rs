@@ -34,6 +34,15 @@ pub struct AnthropicBlock {
     pub r#type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<AnthropicImageSource>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AnthropicImageSource {
+    pub r#type: String,
+    pub media_type: String,
+    pub data: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
