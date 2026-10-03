@@ -31,7 +31,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn chat_completions (State (state) : State < AppState > , Json (req) : Json < ChatCompletionRequest > ,) -> Result < Response , (StatusCode , Json < serde_json :: Value >) >
   ```
 
-### `src/api/chat_stream.rs` (Role: api, Lines: 248)
+### `src/api/chat_stream.rs` (Role: api, Lines: 278)
 - **Responsibility**: Core api logic in src/api/chat_stream.rs
 - **Imports**: use crate :: api :: state :: AppState , use crate :: domain :: openai :: { ChatChoice , ChatCompletionChunk , ChatCompletionResponse , ChatMessage , ChunkChoice , ChunkDelta , ResponseMessage , Usage , } , use crate :: domain :: session :: { compute_next_signature , next_parent_id , Session } , use crate :: infra :: db :: save_session , pub use crate :: infra :: sse :: { drain_sse_lines , extract_chunks_from_event , parse_sse_line , ExtractedChunk , SseLineResult , } , use crate :: infra :: usage_db :: record_usage , use axum :: { body :: Body , http :: { header :: CONTENT_TYPE , StatusCode } , response :: { IntoResponse , Response } , Json , } , use futures :: StreamExt , use std :: time :: { SystemTime , UNIX_EPOCH } , use uuid :: Uuid 
 - **Public Functions & Signatures**:
@@ -40,7 +40,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn handle_unary_response (state : & AppState , model : String , token_id : i64 , session_id : String , parent_id : i64 , req_messages : & [ChatMessage] , upstream_resp : reqwest :: Response ,) -> Result < Response , (StatusCode , String) >
   ```
 
-### `src/api/dashboard.rs` (Role: api, Lines: 202)
+### `src/api/dashboard.rs` (Role: api, Lines: 203)
 - **Responsibility**: Core api logic in src/api/dashboard.rs
 - **Imports**: use crate :: api :: state :: AppState , use crate :: domain :: usage :: format_metric , use crate :: infra :: db :: { add_token as db_add_token , delete_token as db_delete_token , get_tokens } , use axum :: { extract :: { Form , Path , State } , http :: { header :: { COOKIE , SET_COOKIE } , HeaderMap , StatusCode , } , response :: { Html , IntoResponse , Redirect , Response } , } , use serde :: { Deserialize , Serialize } , use sha2 :: { Digest , Sha256 } , use tera :: Context 
 - **Types & Enums**:
@@ -360,7 +360,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn solve (& self , challenge : & PowChallenge , target_path : & str) -> Result < String >
   ```
 
-### `src/infra/prompt.rs` (Role: infra, Lines: 86)
+### `src/infra/prompt.rs` (Role: infra, Lines: 88)
 - **Responsibility**: Core infra logic in src/infra/prompt.rs
 - **Imports**: use crate :: domain :: openai :: ChatMessage 
 - **Public Functions & Signatures**:
@@ -376,7 +376,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn rehome_foreign_files (db : & Connection , client : & DeepSeekClient , solver : & Arc < PowSolver > , file_ids : & [String] , target_token_id : i64 , target_token : & str ,) -> Result < Vec < String > >
   ```
 
-### `src/infra/sse.rs` (Role: infra, Lines: 171)
+### `src/infra/sse.rs` (Role: infra, Lines: 175)
 - **Responsibility**: Core infra logic in src/infra/sse.rs
 - **Types & Enums**:
   ```rust

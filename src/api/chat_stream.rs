@@ -70,6 +70,10 @@ pub async fn handle_streaming_response(
         let comp_tokens = std::cmp::max(1, (full_content.len() / 4) as u32);
         let _ = record_usage(&db, &model, prompt_tokens, comp_tokens, Some(token_id)).await;
 
+        if let Some(json_str) = build_stop_chunk(&chat_id, created, &model, prompt_tokens, comp_tokens) {
+            yield Ok(format!("data: {json_str}\n\n"));
+        }
+
         yield Ok("data: [DONE]\n\n".to_string());
     };
 
@@ -238,6 +242,32 @@ fn create_openai_chunks(
         });
     }
     openai_chunks
+}
+
+fn build_stop_chunk(
+    chat_id: &str,
+    created: u64,
+    model: &str,
+    prompt_tokens: u32,
+    comp_tokens: u32,
+) -> Option<String> {
+    let stop_chunk = ChatCompletionChunk {
+        id: chat_id.to_string(),
+        object: "chat.completion.chunk".to_string(),
+        created,
+        model: model.to_string(),
+        choices: vec![ChunkChoice {
+            index: 0,
+            delta: ChunkDelta::default(),
+            finish_reason: Some("stop".to_string()),
+        }],
+        usage: Some(Usage {
+            prompt_tokens,
+            completion_tokens: comp_tokens,
+            total_tokens: prompt_tokens + comp_tokens,
+        }),
+    };
+    serde_json::to_string(&stop_chunk).ok()
 }
 
 fn current_timestamp() -> u64 {

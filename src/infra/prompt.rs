@@ -68,18 +68,20 @@ fn build_continuing_prompt(messages: &[ChatMessage]) -> String {
 
     let mut user_parts = Vec::new();
     for msg in trailing {
-        if msg.role == "user" {
+        if msg.role == "user" || msg.role == "tool" {
             let text = msg.content.as_text();
             if !text.is_empty() {
-                user_parts.push(text);
+                if msg.role == "tool" {
+                    user_parts.push(format!("[TOOL OUTPUT]\n{}", text.trim()));
+                } else {
+                    user_parts.push(text);
+                }
             }
         }
     }
 
     if user_parts.is_empty() {
-        if let Some(last) = messages.last() {
-            return last.content.as_text();
-        }
+        return "Continue.".to_string();
     }
 
     user_parts.join("\n\n")

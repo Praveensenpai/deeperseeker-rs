@@ -81,12 +81,16 @@ fn update_think_state(val: &serde_json::Value, think_open: &mut bool) {
 }
 
 fn is_status_event(val: &serde_json::Value) -> bool {
+    if val.get("v").and_then(|v| v.as_str()) == Some("FINISHED") {
+        return true;
+    }
     let Some(p) = val.get("p").and_then(|p| p.as_str()) else {
         return false;
     };
-    p.starts_with("response/status")
-        || p.starts_with("response/accumulated_token_count")
-        || p.starts_with("response/view_state")
+    p.contains("status")
+        || p == "quasi_status"
+        || p.contains("accumulated_token")
+        || p.contains("view_state")
 }
 
 fn extract_batch_chunks(

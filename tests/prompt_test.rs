@@ -46,3 +46,48 @@ fn test_build_prompt_continuing_turn() {
     let prompt = build_prompt_for_turn(&messages, false);
     assert_eq!(prompt, "What is 2+2?");
 }
+
+#[test]
+fn test_build_prompt_no_assistant_echo() {
+    let messages = vec![
+        ChatMessage {
+            role: "user".to_string(),
+            content: MessageContent::Text("Write code".to_string()),
+            name: None,
+        },
+        ChatMessage {
+            role: "assistant".to_string(),
+            content: MessageContent::Text("Here is the code...".to_string()),
+            name: None,
+        },
+    ];
+
+    let prompt = build_prompt_for_turn(&messages, false);
+    assert_eq!(prompt, "Continue.");
+    assert!(!prompt.contains("Here is the code..."));
+}
+
+#[test]
+fn test_build_prompt_with_tool_output() {
+    let messages = vec![
+        ChatMessage {
+            role: "user".to_string(),
+            content: MessageContent::Text("List files".to_string()),
+            name: None,
+        },
+        ChatMessage {
+            role: "assistant".to_string(),
+            content: MessageContent::Text("Running ls...".to_string()),
+            name: None,
+        },
+        ChatMessage {
+            role: "tool".to_string(),
+            content: MessageContent::Text("file1.txt\nfile2.txt".to_string()),
+            name: None,
+        },
+    ];
+
+    let prompt = build_prompt_for_turn(&messages, false);
+    assert!(prompt.contains("[TOOL OUTPUT]"));
+    assert!(prompt.contains("file1.txt"));
+}
