@@ -62,11 +62,20 @@
 
 ## 🚀 Quick Start
 
-### 1. Build and Run
+### 🪄 One-Liner (Pre-Built Linux x86_64 Binary)
+
+No Rust toolchain required:
+
+```bash
+curl -fsSL https://github.com/Praveensenpai/deeperseeker-rs/releases/download/v0.1.0/deeperseeker-x86_64-linux.tar.gz | tar -xz
+./deeperseeker
+```
+
+### 🛠️ Build from Source
 
 ```bash
 # Clone the repository
-git clone https://github.com/AmanCode22/deeperseeker-rs.git
+git clone https://github.com/Praveensenpai/deeperseeker-rs.git
 cd deeperseeker-rs
 
 # Compile release binary
