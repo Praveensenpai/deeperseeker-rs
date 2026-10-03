@@ -1,5 +1,6 @@
 pub mod anthropic;
 pub mod chat;
+pub mod chat_chunks;
 pub mod chat_stream;
 pub mod dashboard;
 pub mod files;

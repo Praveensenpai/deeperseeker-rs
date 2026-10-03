@@ -4,9 +4,7 @@ use crate::domain::anthropic::{
     AnthropicBlock, AnthropicContent, AnthropicMessage, AnthropicMessageRequest,
     AnthropicMessageResponse, AnthropicUsage,
 };
-use crate::domain::openai::{
-    ChatCompletionRequest, ChatCompletionResponse, ChatMessage, MessageContent,
-};
+use crate::domain::openai::{ChatCompletionRequest, ChatCompletionResponse, ChatMessage};
 use axum::{
     extract::State,
     http::StatusCode,
@@ -45,21 +43,13 @@ fn convert_to_chat_messages(
 
     if let Some(sys) = system {
         if !sys.trim().is_empty() {
-            messages.push(ChatMessage {
-                role: "system".to_string(),
-                content: MessageContent::Text(sys),
-                name: None,
-            });
+            messages.push(ChatMessage::system(sys));
         }
     }
 
     for m in anthropic_msgs {
         let text = extract_content_text(m.content);
-        messages.push(ChatMessage {
-            role: m.role,
-            content: MessageContent::Text(text),
-            name: None,
-        });
+        messages.push(ChatMessage::new(m.role, text));
     }
 
     messages

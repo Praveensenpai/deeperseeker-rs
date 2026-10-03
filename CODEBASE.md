@@ -15,9 +15,9 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
 
 ## 3. Module & Interface Skeleton
 
-### `src/api/anthropic.rs` (Role: api, Lines: 122)
+### `src/api/anthropic.rs` (Role: api, Lines: 112)
 - **Responsibility**: Core api logic in src/api/anthropic.rs
-- **Imports**: use crate :: api :: chat :: chat_completions , use crate :: api :: state :: AppState , use crate :: domain :: anthropic :: { AnthropicBlock , AnthropicContent , AnthropicMessage , AnthropicMessageRequest , AnthropicMessageResponse , AnthropicUsage , } , use crate :: domain :: openai :: { ChatCompletionRequest , ChatCompletionResponse , ChatMessage , MessageContent , } , use axum :: { extract :: State , http :: StatusCode , response :: { IntoResponse , Response } , Json , } , use serde_json :: json 
+- **Imports**: use crate :: api :: chat :: chat_completions , use crate :: api :: state :: AppState , use crate :: domain :: anthropic :: { AnthropicBlock , AnthropicContent , AnthropicMessage , AnthropicMessageRequest , AnthropicMessageResponse , AnthropicUsage , } , use crate :: domain :: openai :: { ChatCompletionRequest , ChatCompletionResponse , ChatMessage } , use axum :: { extract :: State , http :: StatusCode , response :: { IntoResponse , Response } , Json , } , use serde_json :: json 
 - **Public Functions & Signatures**:
   ```rust
   async fn anthropic_messages (State (state) : State < AppState > , Json (req) : Json < AnthropicMessageRequest > ,) -> Result < Response , (StatusCode , Json < serde_json :: Value >) >
@@ -31,9 +31,27 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn chat_completions (State (state) : State < AppState > , Json (req) : Json < ChatCompletionRequest > ,) -> Result < Response , (StatusCode , Json < serde_json :: Value >) >
   ```
 
-### `src/api/chat_stream.rs` (Role: api, Lines: 278)
+### `src/api/chat_chunks.rs` (Role: api, Lines: 180)
+- **Responsibility**: Core api logic in src/api/chat_chunks.rs
+- **Imports**: use crate :: domain :: openai :: { ChatChoice , ChatCompletionChunk , ChatCompletionResponse , ChunkChoice , ChunkDelta , ResponseMessage , ToolCall , Usage , } , use crate :: infra :: sse :: ExtractedChunk , use std :: time :: { SystemTime , UNIX_EPOCH } , use uuid :: Uuid 
+- **Types & Enums**:
+  ```rust
+  pub struct ChatResponseArgs
+  ```
+- **Public Functions & Signatures**:
+  ```rust
+  fn build_chat_response (args : ChatResponseArgs) -> ChatCompletionResponse
+  fn create_openai_chunks (chat_id : & str , created : u64 , model : & str , chunks : Vec < ExtractedChunk > ,) -> Vec < ChatCompletionChunk >
+  fn make_text_chunk (chat_id : & str , created : u64 , model : & str , text : & str ,) -> ChatCompletionChunk
+  fn make_reasoning_chunk (chat_id : & str , created : u64 , model : & str , reasoning : & str ,) -> ChatCompletionChunk
+  fn make_tool_calls_chunk (chat_id : & str , created : u64 , model : & str , tool_calls : Vec < ToolCall > ,) -> ChatCompletionChunk
+  fn build_terminal_chunk (chat_id : & str , created : u64 , model : & str , prompt_tokens : u32 , comp_tokens : u32 , finish_reason : & str ,) -> Option < String >
+  fn current_timestamp () -> u64
+  ```
+
+### `src/api/chat_stream.rs` (Role: api, Lines: 363)
 - **Responsibility**: Core api logic in src/api/chat_stream.rs
-- **Imports**: use crate :: api :: state :: AppState , use crate :: domain :: openai :: { ChatChoice , ChatCompletionChunk , ChatCompletionResponse , ChatMessage , ChunkChoice , ChunkDelta , ResponseMessage , Usage , } , use crate :: domain :: session :: { compute_next_signature , next_parent_id , Session } , use crate :: infra :: db :: save_session , pub use crate :: infra :: sse :: { drain_sse_lines , extract_chunks_from_event , parse_sse_line , ExtractedChunk , SseLineResult , } , use crate :: infra :: usage_db :: record_usage , use axum :: { body :: Body , http :: { header :: CONTENT_TYPE , StatusCode } , response :: { IntoResponse , Response } , Json , } , use futures :: StreamExt , use std :: time :: { SystemTime , UNIX_EPOCH } , use uuid :: Uuid 
+- **Imports**: use crate :: api :: chat_chunks :: { build_chat_response , build_terminal_chunk , create_openai_chunks , current_timestamp , make_reasoning_chunk , make_text_chunk , make_tool_calls_chunk , ChatResponseArgs , } , use crate :: api :: state :: AppState , use crate :: domain :: openai :: ChatMessage , use crate :: domain :: session :: { compute_next_signature , next_parent_id , Session } , use crate :: infra :: db :: save_session , use crate :: infra :: dsml :: { find_dsml_block_start , parse_dsml , safe_unambiguous_len , ParsedDsml } , pub use crate :: infra :: sse :: { drain_sse_lines , extract_chunks_from_event , parse_sse_line , ExtractedChunk , SseLineResult , } , use crate :: infra :: usage_db :: record_usage , use axum :: { body :: Body , http :: { header :: CONTENT_TYPE , StatusCode } , response :: { IntoResponse , Response } , Json , } , use futures :: StreamExt , use uuid :: Uuid 
 - **Public Functions & Signatures**:
   ```rust
   async fn handle_streaming_response (state : & AppState , model : String , token_id : i64 , session_id : String , parent_id : i64 , req_messages : Vec < ChatMessage > , upstream_resp : reqwest :: Response ,) -> Result < Response , (StatusCode , String) >
@@ -116,7 +134,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn get_usage_metrics (State (state) : State < AppState >) -> impl IntoResponse
   ```
 
-### `src/api.rs` (Role: api, Lines: 61)
+### `src/api.rs` (Role: api, Lines: 62)
 - **Responsibility**: Core api logic in src/api.rs
 - **Imports**: use crate :: api :: anthropic :: anthropic_messages , use crate :: api :: chat :: chat_completions , use crate :: api :: dashboard :: { add_token , delete_token , logout , show_dashboard , show_login , submit_login , } , use crate :: api :: files :: { upload_file_anthropic , upload_file_openai } , use crate :: api :: health :: { health , root } , use crate :: api :: middleware :: require_api_key , use crate :: api :: models :: list_models , use crate :: api :: state :: AppState , use crate :: api :: usage :: get_usage_metrics , use axum :: { middleware :: from_fn_with_state , routing :: { get , post } , Router , } , use tower_http :: cors :: CorsLayer , use tower_http :: services :: ServeDir 
 - **Public Functions & Signatures**:
@@ -203,7 +221,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   pub struct AnthropicUsage
   ```
 
-### `src/domain/openai.rs` (Role: domain, Lines: 149)
+### `src/domain/openai.rs` (Role: domain, Lines: 198)
 - **Responsibility**: Core domain logic in src/domain/openai.rs
 - **Imports**: use serde :: { Deserialize , Serialize } 
 - **Types & Enums**:
@@ -212,6 +230,8 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   pub struct ContentPart
   pub struct ImageUrl
   pub struct FileReference
+  pub struct ToolCall
+  pub struct FunctionCall
   pub struct ChatMessage
   pub struct ChatCompletionRequest
   pub struct ChatCompletionResponse
@@ -227,12 +247,16 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
 - **Public Functions & Signatures**:
   ```rust
   fn as_text (& self) -> String
+  fn new (role : impl Into < String > , content : impl Into < String >) -> Self
+  fn user (content : impl Into < String >) -> Self
+  fn assistant (content : impl Into < String >) -> Self
+  fn system (content : impl Into < String >) -> Self
   fn text_content (& self) -> String
   ```
 
-### `src/domain/session.rs` (Role: domain, Lines: 64)
+### `src/domain/session.rs` (Role: domain, Lines: 92)
 - **Responsibility**: Core domain logic in src/domain/session.rs
-- **Imports**: use serde :: { Deserialize , Serialize } , use sha2 :: { Digest , Sha256 } 
+- **Imports**: use crate :: domain :: openai :: { ChatMessage , ToolCall } , use serde :: { Deserialize , Serialize } , use sha2 :: { Digest , Sha256 } 
 - **Types & Enums**:
   ```rust
   pub struct Session
@@ -241,8 +265,8 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   ```rust
   fn new (token_id : i64 , session_id : String , parent_message_id : i64 , last_used : f64) -> Self
   fn next_parent_id (current_parent_id : i64) -> i64
-  fn compute_signature (messages : & [crate :: domain :: openai :: ChatMessage] , model : & str , scope : & str ,) -> String
-  fn compute_next_signature (messages : & [crate :: domain :: openai :: ChatMessage] , model : & str , assistant_content : & str ,) -> String
+  fn compute_signature (messages : & [ChatMessage] , model : & str , scope : & str) -> String
+  fn compute_next_signature (messages : & [ChatMessage] , model : & str , assistant_content : & str , tool_calls : Option < & [ToolCall] > ,) -> String
   ```
 
 ### `src/domain/token.rs` (Role: domain, Lines: 39)
@@ -347,6 +371,20 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn download_file (& self , token : & str , file_id : & str) -> Result < Vec < u8 > >
   ```
 
+### `src/infra/dsml.rs` (Role: infra, Lines: 217)
+- **Responsibility**: Core infra logic in src/infra/dsml.rs
+- **Imports**: use crate :: domain :: openai :: { FunctionCall , ToolCall } , use once_cell :: sync :: Lazy , use regex :: Regex , use serde_json :: Value , use uuid :: Uuid 
+- **Types & Enums**:
+  ```rust
+  pub struct ParsedDsml
+  ```
+- **Public Functions & Signatures**:
+  ```rust
+  fn find_dsml_block_start (text : & str) -> Option < usize >
+  fn safe_unambiguous_len (text : & str) -> usize
+  fn parse_dsml (text : & str) -> ParsedDsml
+  ```
+
 ### `src/infra/pow.rs` (Role: infra, Lines: 95)
 - **Responsibility**: Core infra logic in src/infra/pow.rs
 - **Imports**: use crate :: domain :: upstream :: { PowChallenge , PowSolution } , use anyhow :: { anyhow , Context , Result } , use base64 :: { engine :: general_purpose :: STANDARD as B64 , Engine as _ } , use std :: sync :: Arc , use wasmtime :: { Engine , Instance , Module , Store } 
@@ -360,7 +398,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn solve (& self , challenge : & PowChallenge , target_path : & str) -> Result < String >
   ```
 
-### `src/infra/prompt.rs` (Role: infra, Lines: 88)
+### `src/infra/prompt.rs` (Role: infra, Lines: 90)
 - **Responsibility**: Core infra logic in src/infra/prompt.rs
 - **Imports**: use crate :: domain :: openai :: ChatMessage 
 - **Public Functions & Signatures**:
@@ -402,7 +440,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn get_model_breakdown (conn : & Connection) -> Result < Vec < ModelUsage > >
   ```
 
-### `src/infra.rs` (Role: infra, Lines: 8)
+### `src/infra.rs` (Role: infra, Lines: 9)
 - **Responsibility**: Core infra logic in src/infra.rs
 
 ### `src/lib.rs` (Role: general, Lines: 6)

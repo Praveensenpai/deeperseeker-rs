@@ -1,3 +1,4 @@
+use crate::domain::openai::{ChatMessage, ToolCall};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -24,11 +25,21 @@ pub fn next_parent_id(current_parent_id: i64) -> i64 {
     current_parent_id + 2
 }
 
-pub fn compute_signature(
-    messages: &[crate::domain::openai::ChatMessage],
-    model: &str,
-    scope: &str,
-) -> String {
+#[derive(Serialize)]
+struct CanonicalMessage<'a> {
+    role: &'a str,
+    content: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    tool_calls: Vec<CanonicalToolCall<'a>>,
+}
+
+#[derive(Serialize)]
+struct CanonicalToolCall<'a> {
+    name: &'a str,
+    arguments: &'a str,
+}
+
+pub fn compute_signature(messages: &[ChatMessage], model: &str, scope: &str) -> String {
     let mut last_ast_idx = None;
     for (i, msg) in messages.iter().enumerate().rev() {
         if msg.role == "assistant" {
@@ -37,12 +48,30 @@ pub fn compute_signature(
         }
     }
 
-    let history: &[crate::domain::openai::ChatMessage] = match last_ast_idx {
+    let history: &[ChatMessage] = match last_ast_idx {
         Some(idx) => &messages[..=idx],
         None => messages,
     };
 
-    let serialized = serde_json::to_string(history).unwrap_or_default();
+    let canonical: Vec<CanonicalMessage> = history
+        .iter()
+        .map(|m| CanonicalMessage {
+            role: &m.role,
+            content: m.text_content(),
+            tool_calls: m
+                .tool_calls
+                .as_deref()
+                .unwrap_or_default()
+                .iter()
+                .map(|tc| CanonicalToolCall {
+                    name: &tc.function.name,
+                    arguments: &tc.function.arguments,
+                })
+                .collect(),
+        })
+        .collect();
+
+    let serialized = serde_json::to_string(&canonical).unwrap_or_default();
     let payload = format!("{model}_{scope}_{serialized}");
     let mut hasher = Sha256::new();
     hasher.update(payload.as_bytes());
@@ -50,15 +79,14 @@ pub fn compute_signature(
 }
 
 pub fn compute_next_signature(
-    messages: &[crate::domain::openai::ChatMessage],
+    messages: &[ChatMessage],
     model: &str,
     assistant_content: &str,
+    tool_calls: Option<&[ToolCall]>,
 ) -> String {
     let mut next_messages = messages.to_vec();
-    next_messages.push(crate::domain::openai::ChatMessage {
-        role: "assistant".to_string(),
-        content: crate::domain::openai::MessageContent::Text(assistant_content.to_string()),
-        name: None,
-    });
+    let mut ast_msg = ChatMessage::assistant(assistant_content);
+    ast_msg.tool_calls = tool_calls.map(|tc| tc.to_vec());
+    next_messages.push(ast_msg);
     compute_signature(&next_messages, model, "")
 }

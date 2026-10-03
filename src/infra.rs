@@ -1,6 +1,7 @@
 pub mod assets;
 pub mod db;
 pub mod deepseek_client;
+pub mod dsml;
 pub mod pow;
 pub mod prompt;
 pub mod rehome;

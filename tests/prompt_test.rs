@@ -1,19 +1,11 @@
-use deeperseeker::domain::openai::{ChatMessage, MessageContent};
+use deeperseeker::domain::openai::ChatMessage;
 use deeperseeker::infra::prompt::build_prompt_for_turn;
 
 #[test]
 fn test_build_prompt_first_turn() {
     let messages = vec![
-        ChatMessage {
-            role: "system".to_string(),
-            content: MessageContent::Text("You are an expert coder.".to_string()),
-            name: None,
-        },
-        ChatMessage {
-            role: "user".to_string(),
-            content: MessageContent::Text("Write a hello world in Rust.".to_string()),
-            name: None,
-        },
+        ChatMessage::system("You are an expert coder."),
+        ChatMessage::user("Write a hello world in Rust."),
     ];
 
     let prompt = build_prompt_for_turn(&messages, true);
@@ -26,21 +18,9 @@ fn test_build_prompt_first_turn() {
 #[test]
 fn test_build_prompt_continuing_turn() {
     let messages = vec![
-        ChatMessage {
-            role: "user".to_string(),
-            content: MessageContent::Text("Hello".to_string()),
-            name: None,
-        },
-        ChatMessage {
-            role: "assistant".to_string(),
-            content: MessageContent::Text("Hello! How can I help?".to_string()),
-            name: None,
-        },
-        ChatMessage {
-            role: "user".to_string(),
-            content: MessageContent::Text("What is 2+2?".to_string()),
-            name: None,
-        },
+        ChatMessage::user("Hello"),
+        ChatMessage::assistant("Hello! How can I help?"),
+        ChatMessage::user("What is 2+2?"),
     ];
 
     let prompt = build_prompt_for_turn(&messages, false);
@@ -50,16 +30,8 @@ fn test_build_prompt_continuing_turn() {
 #[test]
 fn test_build_prompt_no_assistant_echo() {
     let messages = vec![
-        ChatMessage {
-            role: "user".to_string(),
-            content: MessageContent::Text("Write code".to_string()),
-            name: None,
-        },
-        ChatMessage {
-            role: "assistant".to_string(),
-            content: MessageContent::Text("Here is the code...".to_string()),
-            name: None,
-        },
+        ChatMessage::user("Write code"),
+        ChatMessage::assistant("Here is the code..."),
     ];
 
     let prompt = build_prompt_for_turn(&messages, false);
@@ -70,21 +42,9 @@ fn test_build_prompt_no_assistant_echo() {
 #[test]
 fn test_build_prompt_with_tool_output() {
     let messages = vec![
-        ChatMessage {
-            role: "user".to_string(),
-            content: MessageContent::Text("List files".to_string()),
-            name: None,
-        },
-        ChatMessage {
-            role: "assistant".to_string(),
-            content: MessageContent::Text("Running ls...".to_string()),
-            name: None,
-        },
-        ChatMessage {
-            role: "tool".to_string(),
-            content: MessageContent::Text("file1.txt\nfile2.txt".to_string()),
-            name: None,
-        },
+        ChatMessage::user("List files"),
+        ChatMessage::assistant("Running ls..."),
+        ChatMessage::new("tool", "file1.txt\nfile2.txt"),
     ];
 
     let prompt = build_prompt_for_turn(&messages, false);

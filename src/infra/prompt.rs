@@ -68,15 +68,17 @@ fn build_continuing_prompt(messages: &[ChatMessage]) -> String {
 
     let mut user_parts = Vec::new();
     for msg in trailing {
-        if msg.role == "user" || msg.role == "tool" {
-            let text = msg.content.as_text();
-            if !text.is_empty() {
-                if msg.role == "tool" {
-                    user_parts.push(format!("[TOOL OUTPUT]\n{}", text.trim()));
-                } else {
-                    user_parts.push(text);
-                }
-            }
+        if msg.role != "user" && msg.role != "tool" {
+            continue;
+        }
+        let text = msg.content.as_text();
+        if text.is_empty() {
+            continue;
+        }
+        if msg.role == "tool" {
+            user_parts.push(format!("[TOOL OUTPUT]\n{}", text.trim()));
+        } else {
+            user_parts.push(text);
         }
     }
 
