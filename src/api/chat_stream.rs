@@ -31,6 +31,7 @@ struct StreamState {
     pub full_content: String,
     pub streamed_len: usize,
     pub dsml_detected: bool,
+    pub upstream_error: Option<String>,
 }
 
 pub async fn handle_streaming_response(
@@ -65,6 +66,11 @@ pub async fn handle_streaming_response(
             for line in drain_sse_lines(&mut buffer, &bytes) {
                 match parse_sse_line(&line, &mut think_open) {
                     SseLineResult::Done => break 'outer,
+                    SseLineResult::Error(code, msg) => {
+                        tracing::warn!("Upstream error in SSE stream (code {code}): {msg}");
+                        stream_state.upstream_error = Some(msg);
+                        break 'outer;
+                    }
                     SseLineResult::Chunks(chunks) => {
                         for out in process_chunks(chunks, &ctx, &mut stream_state) {
                             yield Ok::<_, std::convert::Infallible>(out);
@@ -78,6 +84,20 @@ pub async fn handle_streaming_response(
         let parsed = parse_dsml(&stream_state.full_content);
         if let Some(final_chunk) = emit_final_tool_or_text(&ctx, &parsed, &stream_state) {
             yield Ok(final_chunk);
+        }
+
+        if stream_state.full_content.is_empty() && parsed.tool_calls.is_empty() {
+            tracing::warn!("Empty stream generation for session {session_id}; deleting stale session");
+            let _ = crate::infra::db::delete_sessions_for_chat(&db, token_id, &session_id).await;
+            let err_msg = stream_state
+                .upstream_error
+                .unwrap_or_else(|| "DeepSeek returned empty completion".to_string());
+            let err_obj = serde_json::json!({
+                "error": { "message": err_msg, "type": "upstream_error" }
+            });
+            yield Ok(format!("data: {err_obj}\n\n"));
+            yield Ok("data: [DONE]\n\n".to_string());
+            return;
         }
 
         let ids = (token_id, session_id, parent_id, prompt_tokens, stream_state.full_content.len());
@@ -154,25 +174,11 @@ fn emit_final_tool_or_text(
     state: &StreamState,
 ) -> Option<String> {
     if !parsed.tool_calls.is_empty() {
-        let tool_chunk = make_tool_calls_chunk(
-            ctx.chat_id,
-            ctx.created,
-            ctx.model,
-            parsed.tool_calls.clone(),
-        );
-        serde_json::to_string(&tool_chunk)
-            .ok()
-            .map(|j| format!("data: {j}\n\n"))
+        let chunk = make_tool_calls_chunk(ctx.chat_id, ctx.created, ctx.model, parsed.tool_calls.clone());
+        serde_json::to_string(&chunk).ok().map(|j| format!("data: {j}\n\n"))
     } else if state.streamed_len < state.full_content.len() {
-        let chunk = make_text_chunk(
-            ctx.chat_id,
-            ctx.created,
-            ctx.model,
-            &state.full_content[state.streamed_len..],
-        );
-        serde_json::to_string(&chunk)
-            .ok()
-            .map(|j| format!("data: {j}\n\n"))
+        let chunk = make_text_chunk(ctx.chat_id, ctx.created, ctx.model, &state.full_content[state.streamed_len..]);
+        serde_json::to_string(&chunk).ok().map(|j| format!("data: {j}\n\n"))
     } else {
         None
     }
@@ -186,31 +192,11 @@ async fn finalize_stream_session(
     ids: (i64, String, i64, u32, usize),
 ) -> Option<String> {
     let (token_id, session_id, parent_id, prompt_tokens, full_len) = ids;
-    save_stream_session(
-        db,
-        req_messages,
-        ctx.model,
-        parsed,
-        token_id,
-        session_id,
-        parent_id,
-    )
-    .await;
+    save_stream_session(db, req_messages, ctx.model, parsed, (token_id, session_id, parent_id)).await;
     let comp_tokens = std::cmp::max(1, (full_len / 4) as u32);
     let _ = record_usage(db, ctx.model, prompt_tokens, comp_tokens, Some(token_id)).await;
-    let finish_reason = if parsed.tool_calls.is_empty() {
-        "stop"
-    } else {
-        "tool_calls"
-    };
-    build_terminal_chunk(
-        ctx.chat_id,
-        ctx.created,
-        ctx.model,
-        prompt_tokens,
-        comp_tokens,
-        finish_reason,
-    )
+    let finish_reason = if parsed.tool_calls.is_empty() { "stop" } else { "tool_calls" };
+    build_terminal_chunk(ctx.chat_id, ctx.created, ctx.model, prompt_tokens, comp_tokens, finish_reason)
 }
 
 async fn save_stream_session(
@@ -218,22 +204,16 @@ async fn save_stream_session(
     messages: &[ChatMessage],
     model: &str,
     parsed: &ParsedDsml,
-    token_id: i64,
-    session_id: String,
-    parent_id: i64,
+    ids: (i64, String, i64),
 ) {
-    let tools = if parsed.tool_calls.is_empty() {
-        None
-    } else {
-        Some(parsed.tool_calls.as_slice())
-    };
+    let (token_id, session_id, parent_id) = ids;
+    let tools = (!parsed.tool_calls.is_empty()).then_some(parsed.tool_calls.as_slice());
     let sig = compute_next_signature(messages, model, &parsed.text_content, tools);
     let next_parent = next_parent_id(parent_id);
     let sess = Session::new(token_id, session_id.clone(), next_parent, 0.0);
     tracing::info!(
-        "Saved session {} (next_parent: {}) for sig {}",
+        "Saved session {} (next_parent: {next_parent}) for sig {}",
         &session_id[..8.min(session_id.len())],
-        next_parent,
         &sig[..8.min(sig.len())]
     );
     let _ = save_session(db, &sig, &sess).await;
@@ -252,14 +232,20 @@ pub async fn handle_unary_response(
     let (raw_content, reasoning) = finalize_content(&full_content, &full_reasoning);
     let parsed = parse_dsml(&raw_content);
 
+    if raw_content.is_empty() && parsed.tool_calls.is_empty() {
+        let _ = crate::infra::db::delete_sessions_for_chat(&state.db, token_id, &session_id).await;
+        return Err((
+            StatusCode::BAD_GATEWAY,
+            "DeepSeek returned empty completion".to_string(),
+        ));
+    }
+
     save_stream_session(
         &state.db,
         req_messages,
         &model,
         &parsed,
-        token_id,
-        session_id,
-        parent_id,
+        (token_id, session_id, parent_id),
     )
     .await;
 
@@ -332,28 +318,20 @@ fn process_unary_lines(
     for line in lines {
         match parse_sse_line(line, think_open) {
             SseLineResult::Done => return true,
+            SseLineResult::Error(code, msg) => {
+                tracing::warn!("Upstream error in unary SSE (code {code}): {msg}");
+                return true;
+            }
             SseLineResult::Chunks(chunks) => {
-                accumulate_chunks(chunks, full_content, full_reasoning);
+                for item in chunks {
+                    if let Some(c) = item.content { full_content.push_str(&c); }
+                    if let Some(r) = item.reasoning { full_reasoning.push_str(&r); }
+                }
             }
             SseLineResult::None => {}
         }
     }
     false
-}
-
-fn accumulate_chunks(
-    chunks: Vec<ExtractedChunk>,
-    full_content: &mut String,
-    full_reasoning: &mut String,
-) {
-    for item in chunks {
-        if let Some(c) = item.content {
-            full_content.push_str(&c);
-        }
-        if let Some(r) = item.reasoning {
-            full_reasoning.push_str(&r);
-        }
-    }
 }
 
 fn finalize_content(full_content: &str, full_reasoning: &str) -> (String, Option<String>) {

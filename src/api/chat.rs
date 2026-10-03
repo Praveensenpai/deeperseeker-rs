@@ -41,6 +41,7 @@ pub async fn chat_completions(
     ))
 }
 
+#[derive(Debug)]
 enum AttemptError {
     RateLimited(i64),
     Fatal(StatusCode, String),
@@ -71,7 +72,27 @@ async fn execute_completion_attempt(
             let _ = mark_active(&state.db, token_id).await;
             Ok(resp)
         }
-        Err(e) => Err(e),
+        Err(e) => {
+            if !prep.is_first {
+                tracing::warn!(
+                    "Resumed session {} failed ({:?}); deleting and falling back to fresh session",
+                    &prep.session_id[..8.min(prep.session_id.len())],
+                    e
+                );
+                let _ = crate::infra::db::delete_sessions_for_chat(&state.db, token_id, &prep.session_id).await;
+                let fresh_prep = create_fresh_session(state, req, exclude).await?;
+                let fresh_token_id = fresh_prep.token.id;
+                state.increment_in_flight(fresh_token_id).await;
+                let fresh_res = run_chat_request(state, req, &fresh_prep).await;
+                state.decrement_in_flight(fresh_token_id).await;
+                if fresh_res.is_ok() {
+                    let _ = touch_token(&state.db, fresh_token_id).await;
+                    let _ = mark_active(&state.db, fresh_token_id).await;
+                }
+                return fresh_res;
+            }
+            Err(e)
+        }
     }
 }
 
@@ -110,6 +131,11 @@ async fn try_resume_session(
 
     if !tok.is_active() || exclude.contains(&tok.id) {
         return Ok(None);
+    }
+
+    let elapsed = crate::infra::db::now_timestamp() - sess.last_used;
+    if elapsed < 0.35 {
+        tokio::time::sleep(std::time::Duration::from_millis(((0.35 - elapsed) * 1000.0) as u64)).await;
     }
 
     tracing::info!(

@@ -6,6 +6,7 @@ pub struct ExtractedChunk {
 pub enum SseLineResult {
     Done,
     Chunks(Vec<ExtractedChunk>),
+    Error(i64, String),
     None,
 }
 
@@ -38,6 +39,16 @@ pub fn parse_sse_line(line: &str, think_open: &mut bool) -> SseLineResult {
     let Ok(json_val) = serde_json::from_str::<serde_json::Value>(data) else {
         return SseLineResult::None;
     };
+
+    if let Some(code) = json_val.get("code").and_then(|c| c.as_i64()) {
+        if code != 0 {
+            let msg = json_val
+                .get("msg")
+                .and_then(|m| m.as_str())
+                .unwrap_or("Upstream error");
+            return SseLineResult::Error(code, msg.to_string());
+        }
+    }
 
     let chunks = extract_chunks_from_event(&json_val, think_open);
     SseLineResult::Chunks(chunks)

@@ -170,6 +170,18 @@ impl DeepSeekClient {
             return Err(anyhow!("DeepSeek upstream HTTP {status}: {text}"));
         }
 
+        let is_sse = resp
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|ct| ct.to_str().ok())
+            .map(|s| s.contains("text/event-stream"))
+            .unwrap_or(true);
+
+        if !is_sse {
+            let text = resp.text().await.unwrap_or_default();
+            return Err(anyhow!("DeepSeek upstream error (non-SSE response): {text}"));
+        }
+
         Ok(resp)
     }
 

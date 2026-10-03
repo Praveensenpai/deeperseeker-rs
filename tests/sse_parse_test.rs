@@ -71,3 +71,18 @@ fn test_sse_status_events_filtering() {
         "response/status must not produce chunks"
     );
 }
+
+#[test]
+fn test_sse_error_detection() {
+    use deeperseeker::infra::sse::{parse_sse_line, SseLineResult};
+    let mut think_open = false;
+
+    let err_line = "data: {\"code\": 40005, \"msg\": \"There is a message being generated\", \"data\": null}";
+    match parse_sse_line(err_line, &mut think_open) {
+        SseLineResult::Error(code, msg) => {
+            assert_eq!(code, 40005);
+            assert_eq!(msg, "There is a message being generated");
+        }
+        _ => panic!("Expected SseLineResult::Error for non-zero code"),
+    }
+}
