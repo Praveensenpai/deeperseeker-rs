@@ -57,7 +57,7 @@ pub async fn handle_streaming_response(
         let mut cur_tok = token_id;
         let ctx = StreamContext { chat_id: &chat_id, created, model: &req.model };
 
-        for attempt in 0..2 {
+        for attempt in 0..3 {
             let mut byte_stream = cur_resp.bytes_stream();
             let mut buffer = String::new();
             let mut think_open = false;
@@ -100,10 +100,13 @@ pub async fn handle_streaming_response(
                 return;
             }
 
-            if attempt == 0 && cur_parent != 0 {
-                tracing::warn!("Resumed stream produced 0 tokens; auto-recovering with fresh upstream session...");
+            if attempt < 2 {
+                let wait_ms = if attempt == 0 { 1200 } else { 2000 };
+                tracing::warn!(
+                    "Stream produced 0 tokens (attempt {attempt}); auto-recovering with fresh session after {wait_ms}ms..."
+                );
                 let _ = crate::infra::db::delete_sessions_for_chat(&db, cur_tok, &cur_sess).await;
-                tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+                tokio::time::sleep(std::time::Duration::from_millis(wait_ms)).await;
 
                 if let Ok(fresh_prep) = crate::api::chat::create_fresh_session(&state, &req, &[]).await {
                     if let Ok(comp_args) = crate::api::chat::prepare_completion_args(&state, &req, &fresh_prep).await {

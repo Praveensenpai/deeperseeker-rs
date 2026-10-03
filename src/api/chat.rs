@@ -134,8 +134,8 @@ async fn try_resume_session(
     }
 
     let elapsed = crate::infra::db::now_timestamp() - sess.last_used;
-    if elapsed < 0.75 {
-        tokio::time::sleep(std::time::Duration::from_millis(((0.75 - elapsed) * 1000.0) as u64)).await;
+    if elapsed < 1.25 {
+        tokio::time::sleep(std::time::Duration::from_millis(((1.25 - elapsed) * 1000.0) as u64)).await;
     }
 
     tracing::info!(
