@@ -2,6 +2,13 @@ use crate::domain::openai::{ModelList, ModelObject};
 use axum::{response::IntoResponse, Json};
 
 const KNOWN_MODELS: &[(&str, &str)] = &[
+    ("deepseek-chat", "deepseek"),
+    ("deepseek-reasoner", "deepseek"),
+    ("deepseek-r1", "deepseek"),
+    ("deepseek-v3", "deepseek"),
+    ("deepseek-coder", "deepseek"),
+    ("claude-3-5-sonnet-20241022", "anthropic"),
+    ("claude-3-7-sonnet", "anthropic"),
     ("v4.1flash", "deepseek"),
     ("anthropic/claude-v4.1flash", "anthropic"),
 ];

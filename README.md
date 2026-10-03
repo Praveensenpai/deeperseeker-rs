@@ -302,6 +302,18 @@ Configure `deeperseeker-rs` as a custom provider in `~/.config/opencode/opencode
       "models": {
         "v4.1flash": {
           "name": "DeepSeek V4.1 Flash"
+        },
+        "deepseek-chat": {
+          "name": "DeepSeek Chat"
+        },
+        "deepseek-reasoner": {
+          "name": "DeepSeek Reasoner (R1)"
+        },
+        "deepseek-r1": {
+          "name": "DeepSeek R1"
+        },
+        "anthropic/claude-v4.1flash": {
+          "name": "Claude V4.1 Flash"
         }
       }
     }
@@ -314,6 +326,22 @@ Then run OpenCode in any project directory:
 ```bash
 opencode
 ```
+
+### 📋 Supported Model Identifiers (`/v1/models`)
+
+DeeperSeeker-RS exposes standard canonical aliases so IDEs, coding agents, and SDKs can auto-discover and bind to their preferred model names:
+
+| Identifier | Provider | Description |
+| :--- | :--- | :--- |
+| `v4.1flash` | `deepseek` | Primary DeepSeek Web model |
+| `deepseek-chat` | `deepseek` | Standard OpenAI alias for DeepSeek V3 / Chat |
+| `deepseek-reasoner` | `deepseek` | DeepSeek R1 reasoning mode |
+| `deepseek-r1` | `deepseek` | DeepSeek R1 canonical alias |
+| `deepseek-v3` | `deepseek` | DeepSeek V3 canonical alias |
+| `deepseek-coder` | `deepseek` | DeepSeek Coder alias for code editors |
+| `anthropic/claude-v4.1flash` | `anthropic` | Claude Desktop auto-discovery identifier |
+| `claude-3-5-sonnet-20241022` | `anthropic` | Anthropic Sonnet 3.5 compatibility alias |
+| `claude-3-7-sonnet` | `anthropic` | Anthropic Sonnet 3.7 compatibility alias |
 
 ### Claude Desktop & Cursor Integration
 
