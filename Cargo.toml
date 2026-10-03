@@ -1,0 +1,70 @@
+[package]
+name = "deeperseeker"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "deeperseeker"
+path = "src/lib.rs"
+
+[[bin]]
+name = "deeperseeker"
+path = "src/main.rs"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Web framework
+axum = { version = "0.8", features = ["multipart", "macros"] }
+axum-extra = { version = "0.10", features = ["cookie", "typed-header"] }
+tower = { version = "0.5", features = ["full"] }
+tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json", "multipart", "stream"] }
+
+# Database
+rusqlite = { version = "0.32", features = ["bundled"] }
+tokio-rusqlite = "0.6"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Crypto & hashing
+sha2 = "0.10"
+hex = "0.4"
+rand = "0.8"
+uuid = { version = "1", features = ["v4"] }
+
+# Templating
+tera = "1"
+
+# Config
+dotenvy = "0.15"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Error handling
+anyhow = "1"
+thiserror = "1"
+
+# Utilities
+base64 = "0.22"
+regex = "1"
+once_cell = "1"
+bytes = "1"
+futures = "0.3"
+async-stream = "0.3"
+tokio-stream = "0.1"
+mime = "0.3"
+mime_guess = "2"
+time = { version = "0.3", features = ["formatting", "parsing"] }
+ipnet = "2"
+url = "2"
+
+# WASM for PoW solver
+wasmtime = "28"
