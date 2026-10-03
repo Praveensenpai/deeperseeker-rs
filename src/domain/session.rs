@@ -36,7 +36,15 @@ struct CanonicalMessage<'a> {
 #[derive(Serialize)]
 struct CanonicalToolCall<'a> {
     name: &'a str,
-    arguments: &'a str,
+    arguments: String,
+}
+
+fn normalize_arguments(args: &str) -> String {
+    if let Ok(val) = serde_json::from_str::<serde_json::Value>(args) {
+        serde_json::to_string(&val).unwrap_or_else(|_| args.trim().to_string())
+    } else {
+        args.trim().to_string()
+    }
 }
 
 pub fn compute_signature(messages: &[ChatMessage], model: &str, scope: &str) -> String {
@@ -57,15 +65,15 @@ pub fn compute_signature(messages: &[ChatMessage], model: &str, scope: &str) -> 
         .iter()
         .map(|m| CanonicalMessage {
             role: &m.role,
-            content: m.text_content(),
+            content: m.text_content().trim().to_string(),
             tool_calls: m
                 .tool_calls
                 .as_deref()
                 .unwrap_or_default()
                 .iter()
                 .map(|tc| CanonicalToolCall {
-                    name: &tc.function.name,
-                    arguments: &tc.function.arguments,
+                    name: tc.function.name.trim(),
+                    arguments: normalize_arguments(&tc.function.arguments),
                 })
                 .collect(),
         })

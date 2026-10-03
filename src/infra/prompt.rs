@@ -120,8 +120,23 @@ fn build_conversation_history(messages: &[ChatMessage]) -> String {
             continue;
         }
         let text = msg.content.as_text();
-        if !text.is_empty() {
-            history.push_str(&format!("{}: {}\n", msg.role.to_uppercase(), text.trim()));
+        let role = msg.role.to_uppercase();
+        if let Some(tool_calls) = &msg.tool_calls {
+            let mut tc_blocks = Vec::new();
+            for tc in tool_calls {
+                tc_blocks.push(format!(
+                    "<tool_call>{{\"name\": \"{}\", \"arguments\": {}}}</tool_call>",
+                    tc.function.name, tc.function.arguments
+                ));
+            }
+            let calls_str = tc_blocks.join("\n");
+            if text.trim().is_empty() {
+                history.push_str(&format!("{role}: {calls_str}\n"));
+            } else {
+                history.push_str(&format!("{role}: {}\n{calls_str}\n", text.trim()));
+            }
+        } else if !text.trim().is_empty() {
+            history.push_str(&format!("{role}: {}\n", text.trim()));
         }
     }
     history

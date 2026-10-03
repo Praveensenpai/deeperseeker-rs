@@ -112,6 +112,13 @@ async fn try_resume_session(
         return Ok(None);
     }
 
+    tracing::info!(
+        "Resumed session {} (parent: {}) for sig {}",
+        &sess.session_id[..8.min(sess.session_id.len())],
+        sess.parent_message_id,
+        &sig[..8.min(sig.len())]
+    );
+
     Ok(Some(PreparedSession {
         token: tok,
         session_id: sess.session_id,
@@ -146,6 +153,12 @@ async fn create_fresh_session(
         .create_chat_session(&tok.token)
         .await
         .map_err(|e| AttemptError::Fatal(StatusCode::BAD_GATEWAY, e.to_string()))?;
+
+    tracing::info!(
+        "Created fresh upstream session {} for token {}",
+        &session_id[..8.min(session_id.len())],
+        tok.id
+    );
 
     Ok(PreparedSession {
         token: tok,

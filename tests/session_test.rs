@@ -43,15 +43,15 @@ fn test_signature_with_tool_calls_matching() {
         Some(&tool_calls),
     );
 
-    // Next turn messages sent by OpenAI client in turn 2
-    let mut ast_msg = ChatMessage::assistant("Let me check.");
+    // Next turn messages sent by OpenAI client in turn 2 (with trailing newlines & spaced JSON)
+    let mut ast_msg = ChatMessage::assistant("Let me check.\n\n");
     ast_msg.tool_calls = Some(vec![ToolCall {
         index: None,
         id: "different_client_id".to_string(), // ID should not affect canonical matching
         r#type: "function".to_string(),
         function: FunctionCall {
-            name: "bash".to_string(),
-            arguments: r#"{"command":"ls ~/Projects"}"#.to_string(),
+            name: "bash ".to_string(),
+            arguments: r#"{"command": "ls ~/Projects"}"#.to_string(),
         },
     }]);
 
@@ -65,7 +65,7 @@ fn test_signature_with_tool_calls_matching() {
     let sig_resumed = compute_signature(&turn2_messages, "v4.1flash", "");
     assert_eq!(
         sig_saved, sig_resumed,
-        "Session signature MUST match between turn 1 and turn 2!"
+        "Session signature MUST match between turn 1 and turn 2 despite whitespace differences!"
     );
 }
 

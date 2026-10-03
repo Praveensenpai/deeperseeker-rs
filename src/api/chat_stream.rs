@@ -229,7 +229,13 @@ async fn save_stream_session(
     };
     let sig = compute_next_signature(messages, model, &parsed.text_content, tools);
     let next_parent = next_parent_id(parent_id);
-    let sess = Session::new(token_id, session_id, next_parent, 0.0);
+    let sess = Session::new(token_id, session_id.clone(), next_parent, 0.0);
+    tracing::info!(
+        "Saved session {} (next_parent: {}) for sig {}",
+        &session_id[..8.min(session_id.len())],
+        next_parent,
+        &sig[..8.min(sig.len())]
+    );
     let _ = save_session(db, &sig, &sess).await;
 }
 
