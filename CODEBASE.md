@@ -196,7 +196,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   pub struct UsageArgs
   ```
 
-### `src/config.rs` (Role: general, Lines: 55)
+### `src/config.rs` (Role: general, Lines: 57)
 - **Responsibility**: Core general logic in src/config.rs
 - **Imports**: use std :: env 
 - **Types & Enums**:
@@ -319,7 +319,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
 ### `src/domain.rs` (Role: domain, Lines: 6)
 - **Responsibility**: Core domain logic in src/domain.rs
 
-### `src/infra/assets.rs` (Role: infra, Lines: 39)
+### `src/infra/assets.rs` (Role: infra, Lines: 85)
 - **Responsibility**: Core infra logic in src/infra/assets.rs
 - **Imports**: use std :: path :: { Path , PathBuf } 
 - **Public Functions & Signatures**:
@@ -327,6 +327,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn resolve_asset_dir (relative : & str) -> PathBuf
   fn resolve_templates_pattern () -> String
   fn resolve_wasm_path (default_rel : & str) -> String
+  fn resolve_db_path (custom : Option < & str >) -> String
   ```
 
 ### `src/infra/db.rs` (Role: infra, Lines: 356)
@@ -446,7 +447,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
 ### `src/lib.rs` (Role: general, Lines: 6)
 - **Responsibility**: Core general logic in src/lib.rs
 
-### `src/main.rs` (Role: general, Lines: 115)
+### `src/main.rs` (Role: general, Lines: 133)
 - **Responsibility**: Core general logic in src/main.rs
 - **Imports**: use anyhow :: { Context , Result } , use clap :: Parser , use deeperseeker :: api :: build_router , use deeperseeker :: api :: state :: AppState , use deeperseeker :: cli :: diagnostic :: run_diagnostics , use deeperseeker :: cli :: service :: { install_user_service , service_status , uninstall_user_service } , use deeperseeker :: cli :: token_cmd :: { add_token , list_tokens , remove_token , test_tokens } , use deeperseeker :: cli :: usage_cmd :: display_usage , use deeperseeker :: cli :: { Cli , Commands , ServeArgs , ServiceArgs , ServiceSubcommands , TokenArgs , TokenSubcommands , } , use deeperseeker :: config :: AppConfig , use deeperseeker :: infra :: db :: { init_db , open_db } , use deeperseeker :: infra :: deepseek_client :: DeepSeekClient , use deeperseeker :: infra :: pow :: PowSolver , use deeperseeker :: tui :: run_status , use std :: collections :: HashMap , use std :: sync :: Arc , use tera :: Tera , use tokio :: net :: TcpListener , use tokio :: sync :: Mutex , use tracing :: info 
 

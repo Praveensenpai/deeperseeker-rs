@@ -24,10 +24,12 @@ impl AppConfig {
         let api_key = env::var("DEEPSEEKER_API_KEY").unwrap_or_else(|_| "dseeker".to_string());
         let admin_user = env::var("DEEPSEEKER_ADMIN_USER").unwrap_or_else(|_| "admin".to_string());
         let admin_pass = env::var("DEEPSEEKER_ADMIN_PASS").unwrap_or_else(|_| "admin".to_string());
-        let db_path =
-            env::var("DEEPSEEKER_DB_PATH").unwrap_or_else(|_| "deeperseeker.db".to_string());
+        let db_path = crate::infra::assets::resolve_db_path(None);
         let wasm_path = env::var("DEEPSEEKER_WASM_PATH")
-            .unwrap_or_else(|_| "wasm/deepseek_pow_solver.wasm".to_string());
+            .map(|p| crate::infra::assets::resolve_wasm_path(&p))
+            .unwrap_or_else(|_| {
+                crate::infra::assets::resolve_wasm_path("wasm/deepseek_pow_solver.wasm")
+            });
         let session_secret = env::var("DEEPSEEKER_SESSION_SECRET")
             .unwrap_or_else(|_| "deeperseeker-secret-session-key-32-chars!!".to_string());
         let token_concurrency = env::var("DEEPSEEKER_TOKEN_CONCURRENCY")

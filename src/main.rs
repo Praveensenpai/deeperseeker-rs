@@ -28,24 +28,42 @@ async fn main() -> Result<()> {
     match cli.command {
         None => run_server(ServeArgs::default()).await,
         Some(Commands::Serve(args)) => run_server(args).await,
-        Some(Commands::Status(args)) => run_status(&args.url, &args.db, args.plain).await,
+        Some(Commands::Status(args)) => {
+            let db_path = deeperseeker::infra::assets::resolve_db_path(args.db.as_deref());
+            run_status(&args.url, &db_path, args.plain).await
+        }
         Some(Commands::Usage(args)) => {
-            display_usage(&args.db, args.raw, args.days, args.json).await
+            let db_path = deeperseeker::infra::assets::resolve_db_path(args.db.as_deref());
+            display_usage(&db_path, args.raw, args.days, args.json).await
         }
         Some(Commands::Token(args)) => handle_token(args).await,
-        Some(Commands::Test(args)) => run_diagnostics(&args.db, &args.wasm, Some(&args.url)).await,
+        Some(Commands::Test(args)) => {
+            let db_path = deeperseeker::infra::assets::resolve_db_path(args.db.as_deref());
+            let wasm_path = deeperseeker::infra::assets::resolve_wasm_path(&args.wasm);
+            run_diagnostics(&db_path, &wasm_path, Some(&args.url)).await
+        }
         Some(Commands::Service(args)) => handle_service(args),
     }
 }
 
 async fn handle_token(args: TokenArgs) -> Result<()> {
     match args.subcommand {
-        TokenSubcommands::List { db } => list_tokens(&db).await,
-        TokenSubcommands::Add { token, alias, db } => {
-            add_token(&token, alias.as_deref(), &db).await
+        TokenSubcommands::List { db } => {
+            let db_path = deeperseeker::infra::assets::resolve_db_path(db.as_deref());
+            list_tokens(&db_path).await
         }
-        TokenSubcommands::Remove { id, db } => remove_token(id, &db).await,
-        TokenSubcommands::Test { id, db } => test_tokens(id, &db).await,
+        TokenSubcommands::Add { token, alias, db } => {
+            let db_path = deeperseeker::infra::assets::resolve_db_path(db.as_deref());
+            add_token(&token, alias.as_deref(), &db_path).await
+        }
+        TokenSubcommands::Remove { id, db } => {
+            let db_path = deeperseeker::infra::assets::resolve_db_path(db.as_deref());
+            remove_token(id, &db_path).await
+        }
+        TokenSubcommands::Test { id, db } => {
+            let db_path = deeperseeker::infra::assets::resolve_db_path(db.as_deref());
+            test_tokens(id, &db_path).await
+        }
     }
 }
 
@@ -72,7 +90,7 @@ async fn run_server(args: ServeArgs) -> Result<()> {
         config.db_path = d;
     }
     if let Some(w) = args.wasm {
-        config.wasm_path = w;
+        config.wasm_path = deeperseeker::infra::assets::resolve_wasm_path(&w);
     }
 
     let config = Arc::new(config);

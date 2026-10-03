@@ -37,3 +37,49 @@ pub fn resolve_wasm_path(default_rel: &str) -> String {
     let p = resolve_asset_dir(default_rel);
     p.to_string_lossy().to_string()
 }
+
+pub fn resolve_db_path(custom: Option<&str>) -> String {
+    if let Some(custom_path) = custom {
+        let trimmed = custom_path.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+
+    if let Ok(env_path) = std::env::var("DEEPSEEKER_DB_PATH") {
+        let trimmed = env_path.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+
+    let cwd_db = PathBuf::from("deeperseeker.db");
+    if cwd_db.exists() {
+        return "deeperseeker.db".to_string();
+    }
+
+    if let Some(data) = dirs::data_dir() {
+        let app_db = data.join("deeperseeker").join("deeperseeker.db");
+        return app_db.to_string_lossy().to_string();
+    }
+
+    "deeperseeker.db".to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_resolve_db_path_custom_priority() {
+        assert_eq!(resolve_db_path(Some("custom/path.db")), "custom/path.db");
+        assert_eq!(resolve_db_path(Some("/abs/custom.db")), "/abs/custom.db");
+    }
+
+    #[test]
+    fn test_resolve_db_path_empty_custom_falls_back() {
+        let path = resolve_db_path(Some("   "));
+        assert!(!path.is_empty());
+        assert_ne!(path, "   ");
+    }
+}

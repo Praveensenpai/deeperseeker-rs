@@ -56,8 +56,8 @@ pub struct StatusArgs {
     #[arg(long, default_value = "http://127.0.0.1:4000")]
     pub url: String,
     /// Path to SQLite database file
-    #[arg(short = 'd', long, default_value = "deeperseeker.db")]
-    pub db: String,
+    #[arg(short = 'd', long)]
+    pub db: Option<String>,
     /// Output plain text snapshot instead of launching interactive Ratatui TUI
     #[arg(long)]
     pub plain: bool,
@@ -73,8 +73,8 @@ pub struct TokenArgs {
 pub enum TokenSubcommands {
     /// List all tokens registered in the database
     List {
-        #[arg(short = 'd', long, default_value = "deeperseeker.db")]
-        db: String,
+        #[arg(short = 'd', long)]
+        db: Option<String>,
     },
     /// Add a new DeepSeek token to the pool
     Add {
@@ -83,29 +83,29 @@ pub enum TokenSubcommands {
         /// Optional human-readable alias
         #[arg(short = 'a', long)]
         alias: Option<String>,
-        #[arg(short = 'd', long, default_value = "deeperseeker.db")]
-        db: String,
+        #[arg(short = 'd', long)]
+        db: Option<String>,
     },
     /// Remove a token from the pool by ID
     Remove {
         /// Token ID to remove
         id: i64,
-        #[arg(short = 'd', long, default_value = "deeperseeker.db")]
-        db: String,
+        #[arg(short = 'd', long)]
+        db: Option<String>,
     },
     /// Test token validity against upstream DeepSeek API
     Test {
         /// Optional token ID to test (tests all if omitted)
         id: Option<i64>,
-        #[arg(short = 'd', long, default_value = "deeperseeker.db")]
-        db: String,
+        #[arg(short = 'd', long)]
+        db: Option<String>,
     },
 }
 
 #[derive(Args, Debug)]
 pub struct TestArgs {
-    #[arg(short = 'd', long, default_value = "deeperseeker.db")]
-    pub db: String,
+    #[arg(short = 'd', long)]
+    pub db: Option<String>,
     #[arg(short = 'w', long, default_value = "wasm/deepseek_pow_solver.wasm")]
     pub wasm: String,
     #[arg(long, default_value = "http://127.0.0.1:4000")]
@@ -135,8 +135,8 @@ pub enum ServiceSubcommands {
 #[derive(Args, Debug)]
 pub struct UsageArgs {
     /// Path to SQLite database file
-    #[arg(short = 'd', long, default_value = "deeperseeker.db")]
-    pub db: String,
+    #[arg(short = 'd', long)]
+    pub db: Option<String>,
     /// Number of recent days to display in daily activity
     #[arg(long, default_value_t = 7)]
     pub days: usize,
