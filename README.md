@@ -330,15 +330,47 @@ cargo run --example demo_stream "In 2 sentences, what is Tokio?"
 
 ## 🎨 Web Administration Dashboard
 
-Visit `http://localhost:4000/dashboard` in your browser:
+DeeperSeeker includes a dark-mode web management interface accessible locally or across your LAN / Tailscale network:
+
+- **Local Workstation**: `http://localhost:4000/dashboard`
+- **Remote Host / Server**: `http://mochi:4000/dashboard` *(or `http://<server-ip>:4000/dashboard`)*
+
+```text
+┌────────────────────────────────────────────────────────────────────────┐
+│  ⚡ DEEPERSEEKER WEB GATEWAY DASHBOARD                                │
+├───────────────┬─────────────────┬────────────────────┬─────────────────┤
+│ Pool Health   │ Concurrency     │ Today's Tokens     │ Gateway Port    │
+│  1 / 1 Active │  0 In-Flight    │  1.60M Aggregated  │  :4000/v1       │
+└───────────────┴─────────────────┴────────────────────┴─────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│  🔑 Add DeepSeek Auth Token                                            │
+│  [ Copy Extraction Snippet ]  JSON.parse(localStorage.getItem(...))    │
+│  [ Alias (e.g. primary) ] [ Paste ey... token ] [ Add to Pool ]        │
+└────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│  📊 Token Usage Summary (Today, Yesterday, Week, Month, Year, All-Time)│
+│  Today: 318 Requests · 1.59M Input · 8.9K Output · 1.60M Total Tokens  │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+### 🔐 Authentication & Credentials
+Visiting `/dashboard` unauthenticated redirects to `/login`:
 - **Default Username**: `admin`
 - **Default Password**: `admin`
 
-Features:
-- **Real-Time Counters**: Active token pool size, request totals, input/output tokens.
-- **Token Pool Management**: Add new DeepSeek auth tokens, monitor load, and remove inactive tokens.
-- **Quick-Copy Helper**: One-click button to copy the browser console token extraction snippet.
-- **Detailed Usage Breakdown**: View period aggregates (Today, Yesterday, Week, Month, Year, All-Time) directly in the browser.
+Configure production credentials via `.env` or systemd environment:
+
+```bash
+DEEPSEEKER_ADMIN_USER="admin"
+DEEPSEEKER_ADMIN_PASS="your-secure-password"
+DEEPSEEKER_SESSION_SECRET="random-32-char-secret"
+```
+
+### 🌟 Dashboard Capabilities
+- **⚡ Live Concurrency Counter**: Real-time counter of active upstream streaming requests.
+- **🔑 In-Browser Token Extraction**: Built-in 1-click button to copy the browser DevTools extraction snippet and add tokens directly without restarting the daemon.
+- **🛡️ Token Pool State Monitor**: Visual badges for token accounts (`ACTIVE`, `RATE_LIMITED`, `COOLDOWN`) with masked keys and one-click revocation.
+- **📊 Granular Usage Breakdown**: Human-readable K/M/B summaries with raw integer hover tooltips across all time horizons.
 
 ---
 
