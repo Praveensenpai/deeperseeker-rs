@@ -301,10 +301,20 @@ Configure `deeperseeker-rs` as a custom provider in `~/.config/opencode/opencode
       },
       "models": {
         "v4.1flash": {
-          "name": "DeepSeek V4.1 Flash"
+          "name": "DeepSeek V4.1 Flash",
+          "attachment": true,
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          }
         },
         "anthropic/claude-v4.1flash": {
-          "name": "Claude V4.1 Flash"
+          "name": "Claude V4.1 Flash",
+          "attachment": true,
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          }
         }
       }
     }

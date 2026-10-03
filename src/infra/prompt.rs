@@ -85,7 +85,9 @@ fn has_media_attachments(msg: &ChatMessage) -> bool {
     let crate::domain::openai::MessageContent::Parts(parts) = &msg.content else {
         return false;
     };
-    parts.iter().any(|p| p.image_url.is_some() || p.file.is_some())
+    parts.iter().any(|p| {
+        p.image_url.is_some() || p.file.is_some() || p.url.is_some() || p.data.is_some()
+    })
 }
 
 fn extract_system_prompt(messages: &[ChatMessage], has_tools: bool) -> Option<String> {

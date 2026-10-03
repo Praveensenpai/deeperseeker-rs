@@ -23,7 +23,7 @@ impl MessageContent {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct ContentPart {
     pub r#type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -32,6 +32,32 @@ pub struct ContentPart {
     pub image_url: Option<ImageUrl>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file: Option<FileReference>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mime: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filename: Option<String>,
+}
+
+impl ContentPart {
+    pub fn text(t: impl Into<String>) -> Self {
+        Self {
+            r#type: "text".to_string(),
+            text: Some(t.into()),
+            ..Default::default()
+        }
+    }
+
+    pub fn image_url(url: impl Into<String>) -> Self {
+        Self {
+            r#type: "image_url".to_string(),
+            image_url: Some(ImageUrl { url: url.into() }),
+            ..Default::default()
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

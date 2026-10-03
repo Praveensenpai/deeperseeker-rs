@@ -39,6 +39,10 @@ pub async fn resolve_message_media(
             }
             if let Some(img) = &part.image_url {
                 image_urls.push(img.url.clone());
+            } else if let Some(url) = &part.url {
+                image_urls.push(url.clone());
+            } else if let Some(data) = &part.data {
+                image_urls.push(data.clone());
             }
         }
     }

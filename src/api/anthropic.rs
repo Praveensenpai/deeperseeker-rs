@@ -5,8 +5,7 @@ use crate::domain::anthropic::{
     AnthropicMessageResponse, AnthropicUsage,
 };
 use crate::domain::openai::{
-    ChatCompletionRequest, ChatCompletionResponse, ChatMessage, ContentPart, ImageUrl,
-    MessageContent,
+    ChatCompletionRequest, ChatCompletionResponse, ChatMessage, ContentPart, MessageContent,
 };
 use axum::{
     extract::State,
@@ -85,22 +84,12 @@ fn convert_anthropic_content(content: AnthropicContent) -> MessageContent {
 
 fn convert_anthropic_block(b: AnthropicBlock) -> Option<ContentPart> {
     if b.r#type == "text" {
-        return b.text.map(|t| ContentPart {
-            r#type: "text".to_string(),
-            text: Some(t),
-            image_url: None,
-            file: None,
-        });
+        return b.text.map(ContentPart::text);
     }
 
     if b.r#type == "image" {
-        return b.source.map(|src| ContentPart {
-            r#type: "image_url".to_string(),
-            text: None,
-            image_url: Some(ImageUrl {
-                url: format!("data:{};base64,{}", src.media_type, src.data),
-            }),
-            file: None,
+        return b.source.map(|src| {
+            ContentPart::image_url(format!("data:{};base64,{}", src.media_type, src.data))
         });
     }
 

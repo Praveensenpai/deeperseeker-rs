@@ -65,3 +65,40 @@ fn test_detect_image_magic_bytes() {
     assert_eq!(mime, "image/jpeg");
     assert_eq!(ext, "jpg");
 }
+
+#[test]
+fn test_opencode_file_payload() {
+    let json_str = r#"{
+        "model": "v4.1flash",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "file",
+                        "mime": "image/png",
+                        "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mP8z8BQz0AEYBxVSF+FABJADveWkH6oAAAAAElFTkSuQmCC",
+                        "filename": "test_square.png"
+                    },
+                    {
+                        "type": "text",
+                        "text": "What color is this image?"
+                    }
+                ]
+            }
+        ]
+    }"#;
+
+    let req: ChatCompletionRequest = serde_json::from_str(json_str).unwrap();
+    assert_eq!(req.messages.len(), 1);
+
+    if let MessageContent::Parts(parts) = &req.messages[0].content {
+        assert_eq!(parts.len(), 2);
+        assert_eq!(parts[0].r#type, "file");
+        assert!(parts[0].url.is_some());
+        assert_eq!(parts[0].mime.as_deref(), Some("image/png"));
+        assert_eq!(parts[0].filename.as_deref(), Some("test_square.png"));
+    } else {
+        panic!("Expected Parts variant");
+    }
+}
