@@ -12,7 +12,7 @@
 *Ultra-low latency, memory-efficient reverse proxy bridging DeepSeek's Web API to OpenAI and Claude compatible endpoints.*  
 *Rust rewrite of [DeeperSeeker](https://github.com/AmanCode22/deeperseeker) by [AmanCode22](https://github.com/AmanCode22).*
 
-[⚡ Quick Start](#-quick-start) • [✨ Key Features](#-key-features) • [🔑 DeepSeek Token Setup](#-deepseek-token-setup) • [💻 CLI Ergonomics](#-cli-ergonomics) • [📊 Token Usage Analytics](#-token-usage-analytics) • [🏛️ Architecture](#%EF%B8%8F-architecture) • [🔌 API Usage](#-api-usage) • [🙏 Credits](#-acknowledgements--credits)
+[⚡ Quick Start](#-quick-start) • [✨ Key Features](#-key-features) • [🎥 Showcase](#-usage-showcase) • [🔑 DeepSeek Token Setup](#-deepseek-token-setup) • [💻 CLI Ergonomics](#-cli-ergonomics) • [📊 Token Usage Analytics](#-token-usage-analytics) • [🏛️ Architecture](#%EF%B8%8F-architecture) • [🔌 API & Demos](#-api-usage) • [🙏 Credits](#-acknowledgements--credits)
 
 </div>
 
@@ -49,6 +49,26 @@ cargo build --release
 ```
 
 The server listens on `http://127.0.0.1:4000` by default.
+
+---
+
+## 🎥 Usage Showcase
+
+### 🤖 OpenCode Autonomous Coding & Tool Calls
+Driving real-time coding sessions in OpenCode via `deeperseeker-rs`:
+
+<div align="center">
+  <img src="assets/opencode_showcase.gif" alt="OpenCode Showcase" width="850px" />
+</div>
+
+<br>
+
+### ⚡ Standalone API Streaming Client
+Real-time streaming completions with reasoning blocks via standard OpenAI client libraries:
+
+<div align="center">
+  <img src="assets/api_demo.gif" alt="API Demo" width="850px" />
+</div>
 
 ---
 
@@ -239,6 +259,24 @@ Add to your `claude_desktop_config.json`:
     }
   }
 }
+```
+
+### 🧪 Demo Projects & Client Examples
+
+Run the bundled demonstration clients right out of the repository:
+
+#### Python Streaming Client (`uv run`)
+Standalone script utilizing PEP 723 inline dependency metadata (`openai`, `rich`):
+
+```bash
+uv run examples/demo_client.py "In 2 bullet points, why is Rust fast?"
+```
+
+#### Rust Native Client (`cargo run`)
+Native async streaming client using `reqwest` and `tokio`:
+
+```bash
+cargo run --example demo_stream "In 2 sentences, what is Tokio?"
 ```
 
 ---
