@@ -28,10 +28,6 @@ static HERMES_PARAM_RE: Lazy<Regex> = Lazy::new(|| {
         .expect("valid regex")
 });
 
-static JSON_TOOL_CALL_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?is)<tool_call>\s*(\{.*?\})\s*(?:</(?:tool_)?call>|$)")
-        .expect("valid regex")
-});
 
 static ATTR_NAME_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r#"(?i)\bname\s*=\s*["']([^"']+)["']"#).expect("valid regex"));
@@ -108,8 +104,17 @@ pub fn parse_dsml(text: &str) -> ParsedDsml {
     }
 
     let tool_calls = extract_tool_calls(text);
-    let without_blocks = STRIP_BLOCKS_RE.replace_all(text, "");
-    let cleaned = STRIP_TAGS_RE.replace_all(&without_blocks, "").trim().to_string();
+    let cleaned = if !tool_calls.is_empty() {
+        if let Some(pos) = find_dsml_block_start(text) {
+            text[..pos].trim().to_string()
+        } else {
+            let without_blocks = STRIP_BLOCKS_RE.replace_all(text, "");
+            STRIP_TAGS_RE.replace_all(&without_blocks, "").trim().to_string()
+        }
+    } else {
+        let without_blocks = STRIP_BLOCKS_RE.replace_all(text, "");
+        STRIP_TAGS_RE.replace_all(&without_blocks, "").trim().to_string()
+    };
 
     ParsedDsml {
         text_content: cleaned,
@@ -191,32 +196,43 @@ fn extract_hermes_tool_calls(text: &str, session_prefix: &str, tool_calls: &mut 
 }
 
 fn extract_json_tool_calls(text: &str, session_prefix: &str, tool_calls: &mut Vec<ToolCall>) {
-    for (idx, cap) in JSON_TOOL_CALL_RE.captures_iter(text).enumerate() {
-        let Some(json_str) = cap.get(1).map(|m| m.as_str()) else {
+    let mut search_idx = 0;
+    while let Some(start_pos) = text[search_idx..].find("<tool_call>") {
+        let tag_end = search_idx + start_pos + "<tool_call>".len();
+        let slice = &text[tag_end..];
+        let Some(brace_rel) = slice.find('{') else {
+            search_idx = tag_end;
             continue;
         };
-        let Ok(val) = serde_json::from_str::<Value>(json_str) else {
-            continue;
-        };
-        let Some(name) = val.get("name").or_else(|| val.get("tool")).and_then(|v| v.as_str()) else {
-            continue;
-        };
-        let args_val = val.get("arguments").or_else(|| val.get("parameters"));
-        let arguments = match args_val {
-            Some(Value::String(s)) => s.clone(),
-            Some(v) => serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string()),
-            None => "{}".to_string(),
-        };
+        let json_start = tag_end + brace_rel;
+        let mut de = serde_json::Deserializer::from_str(&text[json_start..]).into_iter::<Value>();
+        if let Some(Ok(val)) = de.next() {
+            let offset = de.byte_offset();
+            search_idx = json_start + offset;
 
-        tool_calls.push(ToolCall {
-            index: Some(idx),
-            id: format!("call_{}_{idx}", &session_prefix[..8]),
-            r#type: "function".to_string(),
-            function: FunctionCall {
-                name: name.to_string(),
-                arguments,
-            },
-        });
+            let Some(name) = val.get("name").or_else(|| val.get("tool")).and_then(|v| v.as_str()) else {
+                continue;
+            };
+            let args_val = val.get("arguments").or_else(|| val.get("parameters"));
+            let arguments = match args_val {
+                Some(Value::String(s)) => s.clone(),
+                Some(v) => serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string()),
+                None => "{}".to_string(),
+            };
+
+            let prefix_len = 8.min(session_prefix.len());
+            tool_calls.push(ToolCall {
+                index: Some(tool_calls.len()),
+                id: format!("call_{}_{}", &session_prefix[..prefix_len], tool_calls.len()),
+                r#type: "function".to_string(),
+                function: FunctionCall {
+                    name: name.to_string(),
+                    arguments,
+                },
+            });
+        } else {
+            search_idx = tag_end;
+        }
     }
 }
 
@@ -358,6 +374,17 @@ mod tests {
         assert_eq!(parsed.tool_calls.len(), 1);
         assert_eq!(parsed.tool_calls[0].function.name, "bash");
         assert_eq!(parsed.tool_calls[0].function.arguments, r#"{"command":"cargo check"}"#);
+    }
+
+    #[test]
+    fn test_parse_json_tool_call_with_nested_objects_and_code() {
+        let raw = "Here is the edit.\n<tool_call>{\"name\": \"edit\", \"arguments\": {\"filePath\": \"src/services.py\", \"oldString\": \"def foo(): { return 1; }\", \"newString\": \"def bar(): { return 2; }\"}}</｜｜DSML｜｜ calls>";
+        let parsed = parse_dsml(raw);
+        assert_eq!(parsed.text_content, "Here is the edit.");
+        assert_eq!(parsed.tool_calls.len(), 1);
+        assert_eq!(parsed.tool_calls[0].function.name, "edit");
+        assert!(parsed.tool_calls[0].function.arguments.contains("src/services.py"));
+        assert!(parsed.tool_calls[0].function.arguments.contains("def foo(): { return 1; }"));
     }
 
     #[test]
