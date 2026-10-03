@@ -6,9 +6,13 @@ use deeperseeker::infra::usage_db::{
 
 #[test]
 fn test_metric_formatting() {
+    assert_eq!(format_metric(0, false), "0");
+    assert_eq!(format_metric(84, false), "84");
     assert_eq!(format_metric(500, false), "500");
     assert_eq!(format_metric(1_500, false), "1.5K");
-    assert_eq!(format_metric(45_210, false), "45.2K");
+    assert_eq!(format_metric(44_850, false), "44.9K");
+    assert_eq!(format_metric(44_934, false), "44.9K");
+    assert_eq!(format_metric(85_524, false), "85.5K");
     assert_eq!(format_metric(2_140_000, false), "2.14M");
     assert_eq!(format_metric(1_050_000_000, false), "1.05B");
     assert_eq!(format_metric(2_140_500, true), "2140500");
@@ -54,4 +58,44 @@ async fn test_db_usage_recording_and_summaries() {
     assert_eq!(models[0].total_tokens, 3000);
     assert_eq!(models[1].model, "deepseek-chat");
     assert_eq!(models[1].total_tokens, 1300);
+}
+
+#[test]
+fn test_dashboard_template_metrics_rendering() {
+    let mut tera = tera::Tera::default();
+    let template_content = std::fs::read_to_string("templates/dashboard.html").unwrap();
+    let base_content = std::fs::read_to_string("templates/base.html").unwrap();
+    tera.add_raw_template("base.html", &base_content).unwrap();
+    tera.add_raw_template("dashboard.html", &template_content)
+        .unwrap();
+
+    let mut ctx = tera::Context::new();
+    let summaries = vec![deeperseeker::api::dashboard::DashboardSummaryView {
+        period: "Today".to_string(),
+        requests: "15".to_string(),
+        prompt_tokens: "44.9K".to_string(),
+        completion_tokens: "84".to_string(),
+        total_tokens: "44.9K".to_string(),
+        raw_requests: 15,
+        raw_prompt_tokens: 44_850,
+        raw_completion_tokens: 84,
+        raw_total_tokens: 44_934,
+    }];
+    ctx.insert("summaries", &summaries);
+    ctx.insert(
+        "tokens",
+        &Vec::<deeperseeker::api::dashboard::DashboardTokenView>::new(),
+    );
+    ctx.insert("active_count", &1);
+    ctx.insert("total_tokens_count", &1);
+    ctx.insert("in_flight", &0);
+    ctx.insert("port", &4000);
+    ctx.insert("api_key", &"dseeker");
+
+    let rendered = tera.render("dashboard.html", &ctx).unwrap();
+    assert!(rendered.contains("44.9K"));
+    assert!(rendered.contains("title=\"44934 tokens\""));
+    assert!(rendered.contains("title=\"44850 tokens\""));
+    assert!(rendered.contains("title=\"84 tokens\""));
+    assert!(rendered.contains("title=\"15 requests\""));
 }

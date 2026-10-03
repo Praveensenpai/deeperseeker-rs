@@ -1,4 +1,5 @@
 use crate::api::state::AppState;
+use crate::domain::usage::format_metric;
 use crate::infra::db::{add_token as db_add_token, delete_token as db_delete_token, get_tokens};
 use axum::{
     extract::{Form, Path, State},
@@ -30,6 +31,19 @@ pub struct DashboardTokenView {
     pub alias: Option<String>,
     pub masked: String,
     pub status: String,
+}
+
+#[derive(Serialize)]
+pub struct DashboardSummaryView {
+    pub period: String,
+    pub requests: String,
+    pub prompt_tokens: String,
+    pub completion_tokens: String,
+    pub total_tokens: String,
+    pub raw_requests: u64,
+    pub raw_prompt_tokens: u64,
+    pub raw_completion_tokens: u64,
+    pub raw_total_tokens: u64,
 }
 
 pub async fn show_login(State(state): State<AppState>) -> Response {
@@ -91,10 +105,11 @@ pub async fn show_dashboard(State(state): State<AppState>, headers: HeaderMap) -
             status: tok.status,
         })
         .collect();
+    let summary_views = map_summary_views(summaries);
 
     let mut ctx = Context::new();
     ctx.insert("tokens", &views);
-    ctx.insert("summaries", &summaries);
+    ctx.insert("summaries", &summary_views);
     ctx.insert("active_count", &active_count);
     ctx.insert("total_tokens_count", &views.len());
     ctx.insert("in_flight", &in_flight_count);
@@ -106,6 +121,25 @@ pub async fn show_dashboard(State(state): State<AppState>, headers: HeaderMap) -
         .render("dashboard.html", &ctx)
         .unwrap_or_default();
     Html(rendered).into_response()
+}
+
+fn map_summary_views(
+    summaries: Vec<crate::domain::usage::UsageSummary>,
+) -> Vec<DashboardSummaryView> {
+    summaries
+        .into_iter()
+        .map(|s| DashboardSummaryView {
+            period: s.period,
+            requests: format_metric(s.requests, false),
+            prompt_tokens: format_metric(s.prompt_tokens, false),
+            completion_tokens: format_metric(s.completion_tokens, false),
+            total_tokens: format_metric(s.total_tokens, false),
+            raw_requests: s.requests,
+            raw_prompt_tokens: s.prompt_tokens,
+            raw_completion_tokens: s.completion_tokens,
+            raw_total_tokens: s.total_tokens,
+        })
+        .collect()
 }
 
 pub async fn add_token(

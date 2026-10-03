@@ -18,7 +18,7 @@
         <span class="metric-label">Today's Total Tokens</span>
         <span class="metric-value">
             {% for s in summaries %}
-                {% if s.period == "Today" %}{{ s.total_tokens }}{% endif %}
+                {% if s.period == "Today" %}<span title="{{ s.raw_total_tokens }} tokens">{{ s.total_tokens }}</span>{% endif %}
             {% endfor %}
         </span>
         <span style="font-size: 0.75rem; color: var(--text-muted);">Aggregated Usage</span>
@@ -159,10 +159,10 @@
                 {% for s in summaries %}
                 <tr>
                     <td style="font-weight: 600; color: var(--text-primary);">{{ s.period }}</td>
-                    <td style="font-family: var(--font-mono);">{{ s.requests }}</td>
-                    <td style="font-family: var(--font-mono);">{{ s.prompt_tokens }}</td>
-                    <td style="font-family: var(--font-mono);">{{ s.completion_tokens }}</td>
-                    <td style="font-family: var(--font-mono); font-weight: 700; color: var(--accent-emerald);">{{ s.total_tokens }}</td>
+                    <td style="font-family: var(--font-mono);" title="{{ s.raw_requests }} requests">{{ s.requests }}</td>
+                    <td style="font-family: var(--font-mono);" title="{{ s.raw_prompt_tokens }} tokens">{{ s.prompt_tokens }}</td>
+                    <td style="font-family: var(--font-mono);" title="{{ s.raw_completion_tokens }} tokens">{{ s.completion_tokens }}</td>
+                    <td style="font-family: var(--font-mono); font-weight: 700; color: var(--accent-emerald);" title="{{ s.raw_total_tokens }} tokens">{{ s.total_tokens }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
