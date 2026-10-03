@@ -246,6 +246,38 @@ curl http://127.0.0.1:4000/v1/chat/completions \
   }'
 ```
 
+### 🤖 OpenCode Setup
+
+Configure `deeperseeker-rs` as a custom provider in `~/.config/opencode/opencode.json`:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "deeperseeker/v4.1flash",
+  "provider": {
+    "deeperseeker": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "DeeperSeeker Gateway",
+      "options": {
+        "baseURL": "http://127.0.0.1:4000/v1",
+        "apiKey": "dseeker"
+      },
+      "models": {
+        "v4.1flash": {
+          "name": "DeepSeek V4.1 Flash"
+        }
+      }
+    }
+  }
+}
+```
+
+Then run OpenCode in any project directory:
+
+```bash
+opencode
+```
+
 ### Claude Desktop & Cursor Integration
 
 Add to your `claude_desktop_config.json`:
