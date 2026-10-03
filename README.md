@@ -303,15 +303,6 @@ Configure `deeperseeker-rs` as a custom provider in `~/.config/opencode/opencode
         "v4.1flash": {
           "name": "DeepSeek V4.1 Flash"
         },
-        "deepseek-chat": {
-          "name": "DeepSeek Chat"
-        },
-        "deepseek-reasoner": {
-          "name": "DeepSeek Reasoner (R1)"
-        },
-        "deepseek-r1": {
-          "name": "DeepSeek R1"
-        },
         "anthropic/claude-v4.1flash": {
           "name": "Claude V4.1 Flash"
         }
@@ -329,19 +320,12 @@ opencode
 
 ### 📋 Supported Model Identifiers (`/v1/models`)
 
-DeeperSeeker-RS exposes standard canonical aliases so IDEs, coding agents, and SDKs can auto-discover and bind to their preferred model names:
+DeeperSeeker-RS serves DeepSeek Web through a unified model pipeline:
 
 | Model | What it is | For coding / agents |
 | :--- | :--- | :--- |
-| **`v4.1flash`** | DeepSeek V4.1 Flash | 🟢 **Best choice** |
-| `deepseek-chat` | Legacy DeepSeek chat model | 🔴 Outdated |
-| `deepseek-reasoner` | Legacy R1-style reasoning endpoint | 🔴 Outdated |
-| `deepseek-r1` | R1 reasoning model | 🟡 Good reasoning, old generation |
-| `deepseek-v3` | V3 generation | 🟡 Older |
-| `deepseek-coder` | Older coding-focused model | 🔴 Very old |
-| `anthropic/claude-v4.1flash` | Claude Desktop auto-discovery alias | 🟢 **Best choice for Claude clients** |
-| `claude-3-5-sonnet-20241022` | Anthropic Sonnet 3.5 compatibility alias | 🟡 Compatibility alias |
-| `claude-3-7-sonnet` | Anthropic Sonnet 3.7 compatibility alias | 🟡 Compatibility alias |
+| **`v4.1flash`** | DeepSeek V4.1 Flash | 🟢 **Primary endpoint** |
+| `anthropic/claude-v4.1flash` | Claude Desktop auto-discovery alias | 🟢 **Claude `/v1/messages` client alias** |
 
 ### Claude Desktop & Cursor Integration
 
