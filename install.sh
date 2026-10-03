@@ -62,7 +62,7 @@ else
         TARGET_VERSION="$(gh release view --repo "${REPO}" --json tagName -q .tagName 2>/dev/null || true)"
     fi
     if [[ -z "${TARGET_VERSION}" ]]; then
-        TARGET_VERSION="$(curl -fsSL -o /dev/null -w "%{url_effective}" "https://github.com/${REPO}/releases/latest" 2>/dev/null | awk -F'/' '{print $NF}' || true)"
+        TARGET_VERSION="$(curl -fsSL -H "Cache-Control: no-cache" -o /dev/null -w "%{url_effective}" "https://github.com/${REPO}/releases/latest" 2>/dev/null | awk -F'/' '{print $NF}' || true)"
     fi
 
     if [[ -n "${TARGET_VERSION}" ]]; then
@@ -75,7 +75,7 @@ else
         gh release download --repo "${REPO}" --pattern "${ASSET}" --dir "${TMP_DIR}"
     else
         LATEST_URL="https://github.com/${REPO}/releases/latest/download/${ASSET}"
-        curl -fsSL "${LATEST_URL}" -o "${TMP_DIR}/${ASSET}"
+        curl -fsSL -H "Cache-Control: no-cache" "${LATEST_URL}" -o "${TMP_DIR}/${ASSET}"
     fi
 
     echo -e "  \033[1;34m📦\033[0m Unpacking archive and deploying assets..."

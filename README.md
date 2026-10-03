@@ -31,7 +31,7 @@
 Install `deeperseeker` in seconds with automatic path and asset setup:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Praveensenpai/deeperseeker-rs/main/install.sh | bash
+curl -fsSL -H "Cache-Control: no-cache" https://raw.githubusercontent.com/Praveensenpai/deeperseeker-rs/main/install.sh | bash
 ```
 
 ### 🛠️ Build from Source
