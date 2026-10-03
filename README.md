@@ -9,9 +9,10 @@
 [![Platform](https://img.shields.io/badge/platform-Linux%20x86__64-FCC624?style=flat-square&logo=linux&logoColor=black)](https://github.com/Praveensenpai/deeperseeker-rs)
 [![License](https://img.shields.io/badge/license-MIT-89b4fa?style=flat-square)](LICENSE)
 
-*Ultra-low latency, memory-efficient reverse proxy bridging DeepSeek's Web API to OpenAI and Claude compatible endpoints.*
+*Ultra-low latency, memory-efficient reverse proxy bridging DeepSeek's Web API to OpenAI and Claude compatible endpoints.*  
+*Rust rewrite of [DeeperSeeker](https://github.com/AmanCode22/deeperseeker) by [AmanCode22](https://github.com/AmanCode22).*
 
-[⚡ Quick Start](#-quick-start) • [✨ Key Features](#-key-features) • [🔑 DeepSeek Token Setup](#-deepseek-token-setup) • [💻 CLI Ergonomics](#-cli-ergonomics) • [📊 Token Usage Analytics](#-token-usage-analytics) • [🏛️ Architecture](#%EF%B8%8F-architecture) • [🔌 API Usage](#-api-usage)
+[⚡ Quick Start](#-quick-start) • [✨ Key Features](#-key-features) • [🔑 DeepSeek Token Setup](#-deepseek-token-setup) • [💻 CLI Ergonomics](#-cli-ergonomics) • [📊 Token Usage Analytics](#-token-usage-analytics) • [🏛️ Architecture](#%EF%B8%8F-architecture) • [🔌 API Usage](#-api-usage) • [🙏 Credits](#-acknowledgements--credits)
 
 </div>
 
@@ -253,6 +254,15 @@ Features:
 - **Token Pool Management**: Add new DeepSeek auth tokens, monitor load, and remove inactive tokens.
 - **Quick-Copy Helper**: One-click button to copy the browser console token extraction snippet.
 - **Detailed Usage Breakdown**: View period aggregates (Today, Yesterday, Week, Month, Year, All-Time) directly in the browser.
+
+---
+
+## 🙏 Acknowledgements & Credits
+
+This project is a high-performance Rust reimplementation built on the reverse-engineering foundation established by the open-source community:
+
+- **[AmanCode22](https://github.com/AmanCode22)**: Creator of the original [DeeperSeeker](https://github.com/AmanCode22/deeperseeker) (Python/FastAPI) and the [DeepSeek PoW Solver](https://github.com/AmanCode22/deepseek_pow_solver) WebAssembly module used to calculate proof-of-work challenges.
+- **[alan7383](https://github.com/alan7383)**: Contributor who identified the Android client header bypass, eliminating the need for headless browser automation.
 
 ---
 
