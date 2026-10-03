@@ -12,7 +12,7 @@
 *Ultra-low latency, memory-efficient reverse proxy bridging DeepSeek's Web API to OpenAI and Claude compatible endpoints.*  
 *Rust rewrite of [DeeperSeeker](https://github.com/AmanCode22/deeperseeker) by [AmanCode22](https://github.com/AmanCode22).*
 
-[⚡ Quick Start](#-quick-start) • [✨ Key Features](#-key-features) • [⚡ Why Rust?](#-why-deeperseeker-rs-rust-vs-python) • [🎥 Showcase](#-usage-showcase) • [🔑 DeepSeek Token Setup](#-deepseek-token-setup) • [💻 CLI Ergonomics](#-cli-ergonomics) • [📊 Token Usage Analytics](#-token-usage-analytics) • [🏛️ Architecture](#%EF%B8%8F-architecture) • [🔌 API & Demos](#-api-usage) • [🙏 Credits](#-acknowledgements--credits)
+[⚡ Quick Start](#-quick-start) • [✨ Key Features](#-key-features) • [⚡ Why Rust?](#-why-deeperseeker-rs-rust-vs-python) • [🎥 Showcase](#-usage-showcase) • [🎨 Web Dashboard](#-web-administration-dashboard) • [🔑 DeepSeek Token Setup](#-deepseek-token-setup) • [💻 CLI Ergonomics](#-cli-ergonomics) • [📊 Token Usage Analytics](#-token-usage-analytics) • [🏛️ Architecture](#%EF%B8%8F-architecture) • [🔌 API & Demos](#-api-usage) • [🙏 Credits](#-acknowledgements--credits)
 
 </div>
 
@@ -59,6 +59,24 @@ Driving real-time coding sessions in OpenCode via `deeperseeker-rs`:
 
 <div align="center">
   <img src="assets/opencode_showcase.gif" alt="OpenCode Showcase" width="850px" />
+</div>
+
+<br>
+
+### 🖥️ Interactive TUI Dashboard & Monitor (`deeperseeker status`)
+Multi-horizon token telemetry, active upstream token pool status, and diagnostic health checks:
+
+<div align="center">
+  <img src="assets/tui_showcase.gif" alt="Interactive TUI Dashboard" width="850px" />
+</div>
+
+<br>
+
+### 🎨 Web Administration Dashboard (`/dashboard`)
+Dark-mode administration portal with real-time pool metrics, token management, and usage breakdown:
+
+<div align="center">
+  <img src="assets/web_dashboard.gif" alt="Web Administration Dashboard" width="850px" />
 </div>
 
 <br>
@@ -152,6 +170,10 @@ Run `deeperseeker status` in any terminal to launch the interactive Ratatui dash
 - **Tab 4: Multi-Probe Diagnostics** — Real-time health checks on Database, WASM PoW, Upstream API, and Local Port.
 
 Press `q` or `Esc` to exit, `Tab` to switch views, and `r` to refresh. Use `--plain` for headless scripting.
+
+<div align="center">
+  <img src="assets/tui_showcase.gif" alt="Interactive Ratatui Dashboard" width="850px" />
+</div>
 
 ---
 
@@ -334,6 +356,12 @@ DeeperSeeker includes a dark-mode web management interface accessible locally or
 
 - **Local Workstation**: `http://localhost:4000/dashboard`
 - **Remote Host / Server**: `http://mochi:4000/dashboard` *(or `http://<server-ip>:4000/dashboard`)*
+
+<div align="center">
+  <img src="assets/web_dashboard.gif" alt="DeeperSeeker Web Administration Dashboard" width="850px" />
+</div>
+
+<br>
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────┐
