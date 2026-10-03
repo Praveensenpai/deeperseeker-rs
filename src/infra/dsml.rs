@@ -5,18 +5,17 @@ use serde_json::Value;
 use uuid::Uuid;
 
 static CALLS_BLOCK_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?is)<[｜\|\s]*DSML[｜\|\s]*(?:calls|tool_calls)[^>]*>(.*?)(?:</[｜\|\s]*DSML[｜\|\s]*(?:calls|tool_calls)>|$)")
+    Regex::new(r"(?is)<[/｜\|\s]*(?:DSML[/｜\|\s]*)?(?:calls|tool_calls)[^>]*>(.*?)(?:</[｜\|\s]*(?:DSML[｜\|\s]*)?(?:calls|tool_calls)[^>]*>|$)")
         .expect("valid regex")
 });
 
 static INVOKE_BLOCK_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?is)<[｜\|\s]*(?:DSML[｜\|\s]*)?invoke\b([^>]*)>(.*?)(?:</[｜\|\s]*(?:DSML[｜\|\s]*)?invoke>|$)")
+    Regex::new(r"(?is)<[/｜\|\s]*(?:DSML[/｜\|\s]*)?invoke\b([^>]*)>(.*?)(?:</[｜\|\s]*(?:DSML[｜\|\s]*)?invoke[^>]*>|$)")
         .expect("valid regex")
 });
 
-static PARAM_BLOCK_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?is)<[｜\|\s]*(?:DSML[｜\|\s]*)?parameter\b([^>]*)>(.*?)(?:</[｜\|\s]*(?:DSML[｜\|\s]*)?parameter>|$)")
-        .expect("valid regex")
+static PARAM_TAG_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"(?is)<[/｜\|\s]*(?:DSML[/｜\|\s]*)?parameter\b([^>]*)>"#).expect("valid regex")
 });
 
 static HERMES_FUNCTION_RE: Lazy<Regex> = Lazy::new(|| {
@@ -223,33 +222,38 @@ fn extract_json_tool_calls(text: &str, session_prefix: &str, tool_calls: &mut Ve
 
 fn extract_arguments(invoke_body: &str) -> String {
     let mut args_map = serde_json::Map::new();
-    let mut has_params = false;
+    let matches: Vec<_> = PARAM_TAG_RE.find_iter(invoke_body).collect();
 
-    for p_cap in PARAM_BLOCK_RE.captures_iter(invoke_body) {
-        has_params = true;
-        let attrs = p_cap.get(1).map(|m| m.as_str()).unwrap_or("");
-        let Some(param_name) = ATTR_NAME_RE
-            .captures(attrs)
-            .and_then(|c| c.get(1))
-            .map(|m| m.as_str())
-        else {
-            continue;
-        };
-        let is_str = ATTR_STRING_RE
-            .captures(attrs)
-            .and_then(|c| c.get(1))
-            .map(|m| m.as_str())
-            != Some("false");
-        let param_val = p_cap.get(2).map(|m| m.as_str().trim()).unwrap_or("");
+    if !matches.is_empty() {
+        for (i, m) in matches.iter().enumerate() {
+            let cap = PARAM_TAG_RE.captures(m.as_str()).unwrap();
+            let attrs = cap.get(1).map(|c| c.as_str()).unwrap_or("");
+            let Some(name_match) = ATTR_NAME_RE.captures(attrs).and_then(|c| c.get(1)) else {
+                continue;
+            };
+            let param_name = name_match.as_str();
+            let is_str = ATTR_STRING_RE
+                .captures(attrs)
+                .and_then(|c| c.get(1))
+                .map(|m| m.as_str())
+                != Some("false");
 
-        insert_param_value(&mut args_map, param_name, param_val, is_str);
+            let val_start = m.end();
+            let val_end = if i + 1 < matches.len() {
+                matches[i + 1].start()
+            } else {
+                invoke_body.len()
+            };
+            let raw_val = &invoke_body[val_start..val_end];
+            let clean_val = STRIP_TAGS_RE.replace_all(raw_val, "").trim().to_string();
+            insert_param_value(&mut args_map, param_name, &clean_val, is_str);
+        }
+        return serde_json::to_string(&args_map).unwrap_or_else(|_| "{}".to_string());
     }
 
-    if !has_params {
-        let trimmed = invoke_body.trim();
-        if trimmed.starts_with('{') && trimmed.ends_with('}') {
-            return trimmed.to_string();
-        }
+    let trimmed = invoke_body.trim();
+    if trimmed.starts_with('{') && trimmed.ends_with('}') {
+        return trimmed.to_string();
     }
 
     serde_json::to_string(&args_map).unwrap_or_else(|_| "{}".to_string())
@@ -364,5 +368,17 @@ mod tests {
         assert_eq!(parsed.tool_calls.len(), 2);
         assert_eq!(parsed.tool_calls[0].function.name, "read");
         assert_eq!(parsed.tool_calls[1].function.name, "read");
+    }
+
+    #[test]
+    fn test_parse_dsml_malformed_parameter_tags() {
+        let raw = r#"<｜DSML｜invoke name="edit"><｜DSML｜parameter name="filePath" string="true">src/services.py</｜｜DSML｜｜ parameter name="oldString" string="true">def old(): pass</｜｜DSML｜｜ parameter name="newString" string="true">def new(): pass</｜｜DSML｜｜ invoke>"#;
+        let parsed = parse_dsml(raw);
+        assert_eq!(parsed.tool_calls.len(), 1);
+        let call = &parsed.tool_calls[0];
+        assert_eq!(call.function.name, "edit");
+        assert!(call.function.arguments.contains(r#""filePath":"src/services.py""#));
+        assert!(call.function.arguments.contains(r#""oldString":"def old(): pass""#));
+        assert!(call.function.arguments.contains(r#""newString":"def new(): pass""#));
     }
 }
