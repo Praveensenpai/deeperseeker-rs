@@ -67,7 +67,7 @@ JSON.parse(localStorage.getItem("userToken")).value
 5. Add it directly to your proxy pool via the CLI:
 
 ```bash
-./deeperseeker token add "YOUR_TOKEN_HERE" --label "primary-account"
+deeperseeker token add "YOUR_TOKEN_HERE" --label "primary-account"
 ```
 
 Or paste it into the Web Dashboard at `http://localhost:4000/dashboard`.
@@ -124,7 +124,7 @@ Press `q` or `Esc` to exit, `Tab` to switch views, and `r` to refresh. Use `--pl
 Track exact input and output token consumption aggregated across all OpenAI and Claude requests.
 
 ```bash
-./deeperseeker usage
+deeperseeker usage
 ```
 
 Outputs a clean, human-readable terminal table formatted with **K, Million, and Billion** metrics:
