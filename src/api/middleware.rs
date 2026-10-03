@@ -8,11 +8,7 @@ use axum::{
 };
 use serde_json::json;
 
-pub async fn require_api_key(
-    State(state): State<AppState>,
-    req: Request,
-    next: Next,
-) -> Response {
+pub async fn require_api_key(State(state): State<AppState>, req: Request, next: Next) -> Response {
     let auth_header = req
         .headers()
         .get(AUTHORIZATION)

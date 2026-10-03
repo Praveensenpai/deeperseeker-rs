@@ -126,15 +126,20 @@ async fn create_fresh_session(
     exclude: &[i64],
 ) -> Result<PreparedSession, AttemptError> {
     let in_flight = state.get_in_flight_snapshot().await;
-    let tok = pick_token(&state.db, exclude, &in_flight, state.config.token_concurrency)
-        .await
-        .map_err(|e| AttemptError::Fatal(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .ok_or_else(|| {
-            AttemptError::Fatal(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "No active tokens available".to_string(),
-            )
-        })?;
+    let tok = pick_token(
+        &state.db,
+        exclude,
+        &in_flight,
+        state.config.token_concurrency,
+    )
+    .await
+    .map_err(|e| AttemptError::Fatal(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .ok_or_else(|| {
+        AttemptError::Fatal(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "No active tokens available".to_string(),
+        )
+    })?;
 
     let session_id = state
         .client
@@ -244,10 +249,7 @@ fn extract_file_ids(messages: &[crate::domain::openai::ChatMessage]) -> Vec<Stri
     file_ids
 }
 
-fn extract_msg_file_ids(
-    msg: &crate::domain::openai::ChatMessage,
-    file_ids: &mut Vec<String>,
-) {
+fn extract_msg_file_ids(msg: &crate::domain::openai::ChatMessage, file_ids: &mut Vec<String>) {
     let crate::domain::openai::MessageContent::Parts(parts) = &msg.content else {
         return;
     };

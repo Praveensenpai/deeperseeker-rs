@@ -3,19 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}DeeperSeeker{% endblock %}</title>
+    <title>{% block title %}DeeperSeeker — DeepSeek AI Proxy Gateway{% endblock %}</title>
     <link rel="stylesheet" href="/static/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
-    <nav>
-        <a href="/">Dashboard</a>
-        <span class="sep">|</span>
-        <a href="/logout">Logout</a>
-        <span class="sep">|</span>
-        <span class="brand">DeeperSeeker</span>
+    <nav class="navbar">
+        <div class="brand-group">
+            <span class="brand-kanji">深索</span>
+            <span class="brand-name">DeeperSeeker</span>
+            <span class="version-pill">v0.2.0</span>
+        </div>
+        <div class="nav-actions">
+            <div class="live-badge">
+                <span class="pulse-dot"></span>
+                <span>ONLINE</span>
+            </div>
+            <a href="/dashboard" class="nav-link">Dashboard</a>
+            <a href="/v1/models" target="_blank" class="nav-link">Models</a>
+            <a href="/v1/usage" target="_blank" class="nav-link">API Usage</a>
+            <a href="/logout" class="nav-link" style="color: var(--accent-rose);">Logout</a>
+        </div>
     </nav>
-    <main>
+    <main class="container">
         {% block content %}{% endblock %}
     </main>
+    <script>
+        function copyText(text, btn) {
+            navigator.clipboard.writeText(text).then(() => {
+                const orig = btn.innerText;
+                btn.innerText = "Copied!";
+                btn.style.borderColor = "var(--accent-emerald)";
+                btn.style.color = "var(--accent-emerald)";
+                setTimeout(() => {
+                    btn.innerText = orig;
+                    btn.style.borderColor = "";
+                    btn.style.color = "";
+                }, 1800);
+            });
+        }
+    </script>
 </body>
 </html>

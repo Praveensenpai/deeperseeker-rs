@@ -1,17 +1,23 @@
 {% extends "base.html" %}
-{% block title %}Login - DeeperSeeker{% endblock %}
+{% block title %}Sign In — DeeperSeeker{% endblock %}
 {% block content %}
-<h1>Login</h1>
-{% if error %}
-<p style="color:red;">{{ error }}</p>
-{% endif %}
-<form method="post" action="/login">
-    <div style="margin-bottom:10px;">
-        <input type="text" name="username" placeholder="Username" required style="width:300px;">
+<div class="auth-wrapper">
+    <div class="auth-card">
+        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+            <span class="brand-kanji" style="font-size: 1.5rem;">深索</span>
+            <span class="auth-title" style="margin: 0;">DeeperSeeker</span>
+        </div>
+        <p class="auth-desc">Sign in to access your proxy pool & analytics dashboard.</p>
+
+        {% if error %}
+        <div class="alert-danger">{{ error }}</div>
+        {% endif %}
+
+        <form method="post" action="/login" class="auth-form">
+            <input type="text" name="username" class="input-field" placeholder="Admin Username" required autocomplete="username">
+            <input type="password" name="password" class="input-field" placeholder="Admin Password" required autocomplete="current-password">
+            <button type="submit" class="btn-primary" style="margin-top: 0.5rem; width: 100%;">Sign In</button>
+        </form>
     </div>
-    <div style="margin-bottom:10px;">
-        <input type="password" name="password" placeholder="Password" required style="width:300px;">
-    </div>
-    <button type="submit">Login</button>
-</form>
+</div>
 {% endblock %}

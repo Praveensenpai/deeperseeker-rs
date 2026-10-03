@@ -14,6 +14,13 @@ pub fn now_timestamp() -> f64 {
 }
 
 pub async fn open_db(path: &str) -> Result<Connection> {
+    if path != ":memory:" {
+        if let Some(parent) = std::path::Path::new(path).parent() {
+            if !parent.as_os_str().is_empty() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+        }
+    }
     let conn = Connection::open(path).await.context("Failed to open DB")?;
     conn.call(|c| {
         c.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")?;
@@ -46,7 +53,19 @@ pub async fn init_db(conn: &Connection) -> Result<()> {
                 file_id TEXT PRIMARY KEY,
                 token_id INTEGER,
                 created_at REAL
-            );",
+            );
+            CREATE TABLE IF NOT EXISTS request_usage (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp REAL NOT NULL,
+                date TEXT NOT NULL,
+                model TEXT NOT NULL,
+                prompt_tokens INTEGER NOT NULL,
+                completion_tokens INTEGER NOT NULL,
+                total_tokens INTEGER NOT NULL,
+                token_id INTEGER
+            );
+            CREATE INDEX IF NOT EXISTS idx_usage_date ON request_usage(date);
+            CREATE INDEX IF NOT EXISTS idx_usage_ts ON request_usage(timestamp);",
         )?;
         Ok(())
     })
@@ -137,7 +156,10 @@ pub async fn get_token(conn: &Connection, token_id: i64) -> Result<Option<Token>
 pub async fn delete_token(conn: &Connection, token_id: i64) -> Result<()> {
     conn.call(move |c| {
         c.execute("DELETE FROM tokens WHERE id = ?1", params![token_id])?;
-        c.execute("DELETE FROM sessions WHERE token_id = ?1", params![token_id])?;
+        c.execute(
+            "DELETE FROM sessions WHERE token_id = ?1",
+            params![token_id],
+        )?;
         Ok(())
     })
     .await
@@ -223,9 +245,11 @@ pub async fn pick_token(
         match (under_cap_a, under_cap_b) {
             (true, false) => std::cmp::Ordering::Less,
             (false, true) => std::cmp::Ordering::Greater,
-            _ => inf_a
-                .cmp(&inf_b)
-                .then_with(|| a.last_used.unwrap_or(0.0).total_cmp(&b.last_used.unwrap_or(0.0))),
+            _ => inf_a.cmp(&inf_b).then_with(|| {
+                a.last_used
+                    .unwrap_or(0.0)
+                    .total_cmp(&b.last_used.unwrap_or(0.0))
+            }),
         }
     });
 
@@ -261,11 +285,7 @@ pub async fn find_session(conn: &Connection, signature: &str) -> Result<Option<S
     .context("Failed to find session")
 }
 
-pub async fn save_session(
-    conn: &Connection,
-    signature: &str,
-    session: &Session,
-) -> Result<()> {
+pub async fn save_session(conn: &Connection, signature: &str, session: &Session) -> Result<()> {
     let sig = signature.to_string();
     let sess = session.clone();
     let now = now_timestamp();

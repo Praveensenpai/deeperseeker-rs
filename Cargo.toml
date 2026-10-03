@@ -1,6 +1,6 @@
 [package]
 name = "deeperseeker"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 [lib]
@@ -66,5 +66,12 @@ time = { version = "0.3", features = ["formatting", "parsing"] }
 ipnet = "2"
 url = "2"
 
+# CLI & TUI (sys-chronicle inspired)
+clap = { version = "4.5", features = ["derive"] }
+ratatui = "0.26"
+crossterm = "0.27"
+dirs = "5.0"
+
 # WASM for PoW solver
 wasmtime = "28"
+

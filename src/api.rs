@@ -7,6 +7,7 @@ pub mod health;
 pub mod middleware;
 pub mod models;
 pub mod state;
+pub mod usage;
 
 use crate::api::anthropic::anthropic_messages;
 use crate::api::chat::chat_completions;
@@ -18,6 +19,7 @@ use crate::api::health::{health, root};
 use crate::api::middleware::require_api_key;
 use crate::api::models::list_models;
 use crate::api::state::AppState;
+use crate::api::usage::get_usage_metrics;
 use axum::{
     middleware::from_fn_with_state,
     routing::{get, post},
@@ -39,6 +41,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/health", get(health))
         .route("/models", get(list_models))
         .route("/v1/models", get(list_models))
+        .route("/v1/usage", get(get_usage_metrics))
+        .route("/api/usage", get(get_usage_metrics))
         .route("/login", get(show_login).post(submit_login))
         .route("/logout", get(logout))
         .route("/dashboard", get(show_dashboard))

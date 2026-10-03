@@ -38,13 +38,7 @@ pub async fn upload_file_openai(
     let file_size = bytes.len();
     let file_id = state
         .client
-        .upload_file(
-            &token.token,
-            &pow_resp,
-            &filename,
-            &content_type,
-            bytes,
-        )
+        .upload_file(&token.token, &pow_resp, &filename, &content_type, bytes)
         .await
         .map_err(internal_error)?;
 

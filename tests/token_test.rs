@@ -25,7 +25,9 @@ async fn test_db_token_lifecycle() {
     init_db(&db).await.unwrap();
 
     add_token(&db, "test-token-1", Some("work")).await.unwrap();
-    add_token(&db, "test-token-2", Some("personal")).await.unwrap();
+    add_token(&db, "test-token-2", Some("personal"))
+        .await
+        .unwrap();
 
     let tokens = get_tokens(&db).await.unwrap();
     assert_eq!(tokens.len(), 2);

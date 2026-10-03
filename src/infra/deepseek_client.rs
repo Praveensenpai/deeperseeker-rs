@@ -1,6 +1,4 @@
-use crate::domain::upstream::{
-    CreateChatResponse, PowChallenge, PowChallengeWrapper,
-};
+use crate::domain::upstream::{CreateChatResponse, PowChallenge, PowChallengeWrapper};
 use anyhow::{anyhow, Context, Result};
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE, USER_AGENT};
 use reqwest::Client;
@@ -43,14 +41,8 @@ impl DeepSeekClient {
             USER_AGENT,
             HeaderValue::from_static("Dalvik/2.1.0 (Linux; U; Android 14; Pixel 7)"),
         );
-        headers.insert(
-            "x-client-platform",
-            HeaderValue::from_static("android"),
-        );
-        headers.insert(
-            "x-client-version",
-            HeaderValue::from_static(CLIENT_VERSION),
-        );
+        headers.insert("x-client-platform", HeaderValue::from_static("android"));
+        headers.insert("x-client-version", HeaderValue::from_static(CLIENT_VERSION));
         headers.insert("x-client-locale", HeaderValue::from_static("en_US"));
         headers.insert(
             "x-client-bundle-id",
@@ -141,10 +133,7 @@ impl DeepSeekClient {
         Ok(wrapper.data.biz_data.chat_session.id)
     }
 
-    pub async fn send_completion_request(
-        &self,
-        args: CompletionArgs,
-    ) -> Result<reqwest::Response> {
+    pub async fn send_completion_request(&self, args: CompletionArgs) -> Result<reqwest::Response> {
         let url = format!("{BASE_URL}/api/v0/chat/completion");
         let headers = self.build_headers(&args.token, Some(&args.pow_response))?;
 

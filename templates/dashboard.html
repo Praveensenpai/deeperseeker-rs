@@ -1,77 +1,182 @@
 {% extends "base.html" %}
-{% block title %}Dashboard - DeeperSeeker{% endblock %}
+{% block title %}Dashboard — DeeperSeeker{% endblock %}
 {% block content %}
-<h1>Dashboard</h1>
 
-<section>
-    <h2>Add Auth Token</h2>
-    <div class="steps">
-        <p><strong>Steps:</strong></p>
-        <ol>
-            <li>Open <strong>incognito/private</strong> window</li>
-            <li>Go to <a href="https://chat.deepseek.com" target="_blank">chat.deepseek.com</a> and login</li>
-            <li>Open DevTools (F12) → Console → paste:</li>
-        </ol>
-        <code>JSON.parse(localStorage.getItem("userToken")).value</code>
-        <ol start="4">
-            <li>Copy the token and paste below</li>
-            <li><strong>Remove any surrounding quotes</strong> — paste only the raw token string</li>
-            <li><strong>Close the incognito window</strong> to preserve the login</li>
-        </ol>
+<!-- Hero Metrics Grid -->
+<div class="metrics-grid">
+    <div class="metric-card">
+        <span class="metric-label">Token Pool Health</span>
+        <span class="metric-value" style="color: var(--accent-emerald);">{{ active_count }} / {{ total_tokens_count }}</span>
+        <span style="font-size: 0.75rem; color: var(--text-muted);">Active / Total in Pool</span>
     </div>
-    <div class="warning">
-        If you logout from DeepSeek in browser, this token stops working.
+    <div class="metric-card">
+        <span class="metric-label">In-Flight Concurrency</span>
+        <span class="metric-value" style="color: var(--accent-cyan);">{{ in_flight }}</span>
+        <span style="font-size: 0.75rem; color: var(--text-muted);">Active Upstream Streams</span>
     </div>
-    <form method="post" action="/tokens/add">
-        <input type="text" name="alias" placeholder="Alias (optional, e.g. personal, work)" style="width:200px">
-        <input type="text" name="auth_token" placeholder="Paste auth token here (no quotes)" style="width:400px">
-        <button type="submit">Add Token</button>
-    </form>
-</section>
-
-<section>
-    <h2>Tokens ({{ tokens|length }})</h2>
-    {% if tokens %}
-    <table>
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Alias</th>
-                <th>Token</th>
-                <th>Status</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for tok in tokens %}
-            <tr>
-                <td>{{ tok.id }}</td>
-                <td>{{ tok.alias | default(value="—") }}</td>
-                <td><code>{{ tok.masked }}</code></td>
-                <td>
-                    <span class="status {% if tok.status == "ACTIVE" %}ok{% elif tok.status == "RATE_LIMITED" %}warn{% else %}err{% endif %}">
-                        {{ tok.status }}
-                    </span>
-                </td>
-                <td>
-                    <form method="post" action="/tokens/{{ tok.id }}/delete" style="display:inline"
-                          onsubmit="return confirm('Delete?')">
-                        <button type="submit" class="btn-sm btn-danger">Delete</button>
-                    </form>
-                </td>
-            </tr>
+    <div class="metric-card">
+        <span class="metric-label">Today's Total Tokens</span>
+        <span class="metric-value">
+            {% for s in summaries %}
+                {% if s.period == "Today" %}{{ s.total_tokens }}{% endif %}
             {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <p>No tokens yet.</p>
-    {% endif %}
-</section>
+        </span>
+        <span style="font-size: 0.75rem; color: var(--text-muted);">Aggregated Usage</span>
+    </div>
+    <div class="metric-card">
+        <span class="metric-label">Gateway Endpoint</span>
+        <span class="metric-value" style="font-size: 1.1rem; color: var(--accent-cyan);">:{{ port }}/v1</span>
+        <span style="font-size: 0.75rem; color: var(--text-muted);">API Key: <code>{{ api_key }}</code></span>
+    </div>
+</div>
 
-<section>
-    <h2>API</h2>
-    <p>OpenAI: <code>http://localhost:4000/v1</code></p>
-    <p>Anthropic: <code>http://localhost:4000</code></p>
-    <p>Model: <code>v4.1flash</code> (single default DeepSeek model)</p>
-</section>
+<!-- Token Acquisition Guide & Add Token Card -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-cyan);"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg>
+            Add DeepSeek Auth Token
+        </h2>
+    </div>
+
+    <!-- Extraction Guide -->
+    <div class="token-guide-box">
+        <div class="guide-header">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+            <span>How to grab your token from chat.deepseek.com</span>
+        </div>
+        <div class="code-snippet-bar">
+            <span id="token-command">JSON.parse(localStorage.getItem("userToken")).value</span>
+            <button type="button" class="copy-btn" onclick="copyText('JSON.parse(localStorage.getItem(\x22userToken\x22)).value', this)">Copy Command</button>
+        </div>
+        <div class="steps-list">
+            <div class="step-item">
+                <span class="step-num">1</span>
+                <span>Open incognito tab, visit <a href="https://chat.deepseek.com" target="_blank" style="color:var(--accent-cyan);">chat.deepseek.com</a> and log in.</span>
+            </div>
+            <div class="step-item">
+                <span class="step-num">2</span>
+                <span>Press <code>F12</code> to open DevTools, then switch to <strong>Console</strong>.</span>
+            </div>
+            <div class="step-item">
+                <span class="step-num">3</span>
+                <span>Run the command above, copy the string (no quotes), and paste below.</span>
+            </div>
+            <div class="step-item">
+                <span class="step-num">4</span>
+                <span>Close the incognito tab when done to keep session cookies intact.</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Submission Form -->
+    <form method="post" action="/tokens/add" onsubmit="cleanTokenInput(this)">
+        <div class="form-row">
+            <input type="text" name="alias" class="input-field" placeholder="Alias (e.g. primary, work, personal)" style="flex: 1; min-width: 180px;">
+            <input type="text" id="auth_token_input" name="auth_token" class="input-field" placeholder="Paste userToken here..." required style="flex: 3; min-width: 280px;">
+            <button type="submit" class="btn-primary">Add to Pool</button>
+        </div>
+    </form>
+</div>
+
+<!-- Token Pool Table -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-emerald);"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
+            Active Token Pool ({{ tokens|length }})
+        </h2>
+    </div>
+
+    {% if tokens %}
+    <div class="table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width: 60px;">ID</th>
+                    <th>Alias</th>
+                    <th>Masked Token</th>
+                    <th>Status</th>
+                    <th style="text-align: right;">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for tok in tokens %}
+                <tr>
+                    <td style="font-family: var(--font-mono); font-weight: 600;">#{{ tok.id }}</td>
+                    <td style="font-weight: 500; color: var(--text-primary);">{{ tok.alias | default(value="—") }}</td>
+                    <td>
+                        <code style="font-family: var(--font-mono); font-size: 0.8rem;">{{ tok.masked }}</code>
+                    </td>
+                    <td>
+                        {% if tok.status == "ACTIVE" %}
+                            <span class="badge badge-active">● Active</span>
+                        {% elif tok.status == "RATE_LIMITED" %}
+                            <span class="badge badge-limited">▲ Rate Limited</span>
+                        {% else %}
+                            <span class="badge" style="background: rgba(244,63,94,0.12); color: var(--accent-rose);">○ Suspended</span>
+                        {% endif %}
+                    </td>
+                    <td style="text-align: right;">
+                        <form method="post" action="/tokens/{{ tok.id }}/delete" style="display:inline" onsubmit="return confirm('Delete token #{{ tok.id }}?')">
+                            <button type="submit" class="btn-danger-outline">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 2.5rem; color: var(--text-muted); font-size: 0.9rem;">
+        No upstream tokens registered. Add your first token above or use <code>deeperseeker token add &lt;TOKEN&gt;</code>.
+    </div>
+    {% endif %}
+</div>
+
+<!-- Token Usage Analytics Table -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-cyan);"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+            Token Usage Analytics
+        </h2>
+        <a href="/v1/usage" target="_blank" style="font-size: 0.75rem; color: var(--accent-cyan); text-decoration: none;">View Raw JSON →</a>
+    </div>
+
+    <div class="table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Period</th>
+                    <th>Requests</th>
+                    <th>Prompt (Input)</th>
+                    <th>Completion (Output)</th>
+                    <th style="color: var(--accent-emerald);">Total Tokens</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in summaries %}
+                <tr>
+                    <td style="font-weight: 600; color: var(--text-primary);">{{ s.period }}</td>
+                    <td style="font-family: var(--font-mono);">{{ s.requests }}</td>
+                    <td style="font-family: var(--font-mono);">{{ s.prompt_tokens }}</td>
+                    <td style="font-family: var(--font-mono);">{{ s.completion_tokens }}</td>
+                    <td style="font-family: var(--font-mono); font-weight: 700; color: var(--accent-emerald);">{{ s.total_tokens }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    function cleanTokenInput(form) {
+        const input = document.getElementById("auth_token_input");
+        if (input && input.value) {
+            input.value = input.value.trim().replace(/^['"]|['"]$/g, "");
+        }
+    }
+</script>
+
 {% endblock %}

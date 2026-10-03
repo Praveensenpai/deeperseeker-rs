@@ -49,6 +49,12 @@ pub struct ChatMessage {
     pub name: Option<String>,
 }
 
+impl ChatMessage {
+    pub fn text_content(&self) -> String {
+        self.content.as_text()
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChatCompletionRequest {
     #[serde(default = "default_model")]
