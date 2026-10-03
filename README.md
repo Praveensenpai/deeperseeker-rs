@@ -331,17 +331,17 @@ opencode
 
 DeeperSeeker-RS exposes standard canonical aliases so IDEs, coding agents, and SDKs can auto-discover and bind to their preferred model names:
 
-| Identifier | Provider | Description |
+| Model | What it is | For coding / agents |
 | :--- | :--- | :--- |
-| `v4.1flash` | `deepseek` | Primary DeepSeek Web model |
-| `deepseek-chat` | `deepseek` | Standard OpenAI alias for DeepSeek V3 / Chat |
-| `deepseek-reasoner` | `deepseek` | DeepSeek R1 reasoning mode |
-| `deepseek-r1` | `deepseek` | DeepSeek R1 canonical alias |
-| `deepseek-v3` | `deepseek` | DeepSeek V3 canonical alias |
-| `deepseek-coder` | `deepseek` | DeepSeek Coder alias for code editors |
-| `anthropic/claude-v4.1flash` | `anthropic` | Claude Desktop auto-discovery identifier |
-| `claude-3-5-sonnet-20241022` | `anthropic` | Anthropic Sonnet 3.5 compatibility alias |
-| `claude-3-7-sonnet` | `anthropic` | Anthropic Sonnet 3.7 compatibility alias |
+| **`v4.1flash`** | DeepSeek V4.1 Flash | 🟢 **Best choice** |
+| `deepseek-chat` | Legacy DeepSeek chat model | 🔴 Outdated |
+| `deepseek-reasoner` | Legacy R1-style reasoning endpoint | 🔴 Outdated |
+| `deepseek-r1` | R1 reasoning model | 🟡 Good reasoning, old generation |
+| `deepseek-v3` | V3 generation | 🟡 Older |
+| `deepseek-coder` | Older coding-focused model | 🔴 Very old |
+| `anthropic/claude-v4.1flash` | Claude Desktop auto-discovery alias | 🟢 **Best choice for Claude clients** |
+| `claude-3-5-sonnet-20241022` | Anthropic Sonnet 3.5 compatibility alias | 🟡 Compatibility alias |
+| `claude-3-7-sonnet` | Anthropic Sonnet 3.7 compatibility alias | 🟡 Compatibility alias |
 
 ### Claude Desktop & Cursor Integration
 
