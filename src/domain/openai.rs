@@ -135,7 +135,7 @@ impl ChatCompletionRequest {
 }
 
 fn default_model() -> String {
-    "deepseek-chat".to_string()
+    "v4.1flash".to_string()
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
