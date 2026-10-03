@@ -199,7 +199,7 @@ async fn prepare_completion_args(
     req: &ChatCompletionRequest,
     prep: &PreparedSession,
 ) -> Result<CompletionArgs, AttemptError> {
-    let prompt = build_prompt_for_turn(&req.messages, prep.is_first);
+    let prompt = build_prompt_for_turn(&req.messages, req.tools.as_deref(), prep.is_first);
     let target_path = "/api/v0/chat/completion";
 
     let challenge = state

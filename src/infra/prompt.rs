@@ -1,44 +1,71 @@
 use crate::domain::openai::ChatMessage;
+use serde_json::Value;
 
-pub fn build_prompt_for_turn(messages: &[ChatMessage], is_first: bool) -> String {
+pub const TOOL_USE_INSTRUCTIONS: &str = "\
+TOOL USE INSTRUCTIONS:\n\
+You have access to tools. When you need to call a tool, output ONLY the tool call XML block and nothing else:\n\
+<tool_call>{\"name\": \"tool_name\", \"arguments\": {\"param\": \"value\"}}</tool_call>\n\
+Never repeat past messages, history, or XML tags. Output exactly one tool call block when invoking a tool.";
+
+pub fn build_prompt_for_turn(
+    messages: &[ChatMessage],
+    tools: Option<&[Value]>,
+    is_first: bool,
+) -> String {
     if is_first {
-        build_first_turn_prompt(messages)
+        build_first_turn_prompt(messages, tools)
     } else {
-        build_continuing_prompt(messages)
+        build_continuing_prompt(messages, tools)
     }
 }
 
-fn build_first_turn_prompt(messages: &[ChatMessage]) -> String {
-    let mut prompt = String::new();
-
-    // Extract system prompt
-    for msg in messages {
-        if msg.role == "system" {
-            let text = msg.content.as_text();
-            if !text.is_empty() {
-                prompt.push_str(&format!("[SYSTEM PROMPT]\n{}\n\n", text.trim()));
-            }
+pub fn format_tools_section(tools: &[Value]) -> Option<String> {
+    if tools.is_empty() {
+        return None;
+    }
+    let mut parts = Vec::new();
+    for tool in tools {
+        if let Some(fn_obj) = tool.get("function") {
+            let name = fn_obj.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            let desc = fn_obj.get("description").and_then(|v| v.as_str()).unwrap_or("");
+            let params = fn_obj.get("parameters").cloned().unwrap_or(serde_json::json!({}));
+            parts.push(format!("Tool: {name}\nDescription: {desc}\nParameters: {params}"));
+        } else if let Some(name) = tool.get("name").and_then(|v| v.as_str()) {
+            let desc = tool.get("description").and_then(|v| v.as_str()).unwrap_or("");
+            let params = tool
+                .get("input_schema")
+                .or_else(|| tool.get("parameters"))
+                .cloned()
+                .unwrap_or(serde_json::json!({}));
+            parts.push(format!("Tool: {name}\nDescription: {desc}\nParameters: {params}"));
         }
     }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("\n\n"))
+    }
+}
 
-    // Previous history if multi-turn
+fn build_first_turn_prompt(messages: &[ChatMessage], tools: Option<&[Value]>) -> String {
+    let mut prompt = String::new();
+    let tools_text = tools.and_then(format_tools_section);
+
+    if let Some(ref tt) = tools_text {
+        prompt.push_str(&format!("[TOOLS]\n{tt}\n\n"));
+    }
+
+    if let Some(sys) = extract_system_prompt(messages, tools_text.is_some()) {
+        prompt.push_str(&format!("[SYSTEM PROMPT]\n{sys}\n\n"));
+    }
+
     if messages.len() > 1 {
-        let mut history = String::new();
-        for msg in &messages[..messages.len() - 1] {
-            if msg.role == "system" {
-                continue;
-            }
-            let text = msg.content.as_text();
-            if !text.is_empty() {
-                history.push_str(&format!("{}: {}\n", msg.role.to_uppercase(), text.trim()));
-            }
-        }
+        let history = build_conversation_history(messages);
         if !history.is_empty() {
             prompt.push_str(&format!("[PREVIOUS CONVERSATION HISTORY]\n{history}\n"));
         }
     }
 
-    // Latest user message
     if let Some(last) = messages.last() {
         if last.role != "system" {
             let text = last.content.as_text();
@@ -49,7 +76,44 @@ fn build_first_turn_prompt(messages: &[ChatMessage]) -> String {
     prompt.trim().to_string()
 }
 
-fn build_continuing_prompt(messages: &[ChatMessage]) -> String {
+fn extract_system_prompt(messages: &[ChatMessage], has_tools: bool) -> Option<String> {
+    for msg in messages {
+        if msg.role != "system" {
+            continue;
+        }
+        let text = msg.content.as_text();
+        if text.is_empty() {
+            continue;
+        }
+        let full = if has_tools {
+            format!("{}\n\n{}", text.trim(), TOOL_USE_INSTRUCTIONS)
+        } else {
+            text.trim().to_string()
+        };
+        return Some(full);
+    }
+    if has_tools {
+        Some(TOOL_USE_INSTRUCTIONS.to_string())
+    } else {
+        None
+    }
+}
+
+fn build_conversation_history(messages: &[ChatMessage]) -> String {
+    let mut history = String::new();
+    for msg in &messages[..messages.len() - 1] {
+        if msg.role == "system" {
+            continue;
+        }
+        let text = msg.content.as_text();
+        if !text.is_empty() {
+            history.push_str(&format!("{}: {}\n", msg.role.to_uppercase(), text.trim()));
+        }
+    }
+    history
+}
+
+fn build_continuing_prompt(messages: &[ChatMessage], tools: Option<&[Value]>) -> String {
     let mut last_ast_idx = None;
     for (i, msg) in messages.iter().enumerate().rev() {
         if msg.role == "assistant" {
@@ -82,9 +146,17 @@ fn build_continuing_prompt(messages: &[ChatMessage]) -> String {
         }
     }
 
-    if user_parts.is_empty() {
-        return "Continue.".to_string();
+    let mut result = if user_parts.is_empty() {
+        "Continue.".to_string()
+    } else {
+        user_parts.join("\n\n")
+    };
+
+    let has_tools = tools.map(|t| !t.is_empty()).unwrap_or(false);
+    if has_tools {
+        result.push_str("\n\n");
+        result.push_str(TOOL_USE_INSTRUCTIONS);
     }
 
-    user_parts.join("\n\n")
+    result
 }

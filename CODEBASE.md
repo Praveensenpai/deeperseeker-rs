@@ -382,7 +382,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn download_file (& self , token : & str , file_id : & str) -> Result < Vec < u8 > >
   ```
 
-### `src/infra/dsml.rs` (Role: infra, Lines: 228)
+### `src/infra/dsml.rs` (Role: infra, Lines: 365)
 - **Responsibility**: Core infra logic in src/infra/dsml.rs
 - **Imports**: use crate :: domain :: openai :: { FunctionCall , ToolCall } , use once_cell :: sync :: Lazy , use regex :: Regex , use serde_json :: Value , use uuid :: Uuid 
 - **Types & Enums**:
@@ -409,12 +409,13 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn solve (& self , challenge : & PowChallenge , target_path : & str) -> Result < String >
   ```
 
-### `src/infra/prompt.rs` (Role: infra, Lines: 90)
+### `src/infra/prompt.rs` (Role: infra, Lines: 162)
 - **Responsibility**: Core infra logic in src/infra/prompt.rs
-- **Imports**: use crate :: domain :: openai :: ChatMessage 
+- **Imports**: use crate :: domain :: openai :: ChatMessage , use serde_json :: Value 
 - **Public Functions & Signatures**:
   ```rust
-  fn build_prompt_for_turn (messages : & [ChatMessage] , is_first : bool) -> String
+  fn build_prompt_for_turn (messages : & [ChatMessage] , tools : Option < & [Value] > , is_first : bool ,) -> String
+  fn format_tools_section (tools : & [Value]) -> Option < String >
   ```
 
 ### `src/infra/rehome.rs` (Role: infra, Lines: 94)
