@@ -79,7 +79,12 @@ async fn execute_completion_attempt(
                     &prep.session_id[..8.min(prep.session_id.len())],
                     e
                 );
-                let _ = crate::infra::db::delete_sessions_for_chat(&state.db, token_id, &prep.session_id).await;
+                let _ = crate::infra::db::delete_sessions_for_chat(
+                    &state.db,
+                    token_id,
+                    &prep.session_id,
+                )
+                .await;
                 let fresh_prep = create_fresh_session(state, req, exclude).await?;
                 let fresh_token_id = fresh_prep.token.id;
                 state.increment_in_flight(fresh_token_id).await;
@@ -135,7 +140,10 @@ async fn try_resume_session(
 
     let elapsed = crate::infra::db::now_timestamp() - sess.last_used;
     if elapsed < 1.25 {
-        tokio::time::sleep(std::time::Duration::from_millis(((1.25 - elapsed) * 1000.0) as u64)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(
+            ((1.25 - elapsed) * 1000.0) as u64,
+        ))
+        .await;
     }
 
     tracing::info!(

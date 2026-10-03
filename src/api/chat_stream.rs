@@ -213,11 +213,25 @@ fn emit_final_tool_or_text(
     state: &StreamState,
 ) -> Option<String> {
     if !parsed.tool_calls.is_empty() {
-        let chunk = make_tool_calls_chunk(ctx.chat_id, ctx.created, ctx.model, parsed.tool_calls.clone());
-        serde_json::to_string(&chunk).ok().map(|j| format!("data: {j}\n\n"))
+        let chunk = make_tool_calls_chunk(
+            ctx.chat_id,
+            ctx.created,
+            ctx.model,
+            parsed.tool_calls.clone(),
+        );
+        serde_json::to_string(&chunk)
+            .ok()
+            .map(|j| format!("data: {j}\n\n"))
     } else if state.streamed_len < state.full_content.len() {
-        let chunk = make_text_chunk(ctx.chat_id, ctx.created, ctx.model, &state.full_content[state.streamed_len..]);
-        serde_json::to_string(&chunk).ok().map(|j| format!("data: {j}\n\n"))
+        let chunk = make_text_chunk(
+            ctx.chat_id,
+            ctx.created,
+            ctx.model,
+            &state.full_content[state.streamed_len..],
+        );
+        serde_json::to_string(&chunk)
+            .ok()
+            .map(|j| format!("data: {j}\n\n"))
     } else {
         None
     }
@@ -232,15 +246,54 @@ async fn finalize_stream_session(
 ) -> Option<String> {
     let (token_id, session_id, parent_id, prompt_tokens, full_len) = ids;
     if parent_id < 40 {
-        save_stream_session(db, req_messages, ctx.model, parsed, (token_id, session_id, parent_id)).await;
+        save_stream_session(
+            db,
+            req_messages,
+            ctx.model,
+            parsed,
+            (token_id, session_id, parent_id),
+        )
+        .await;
     } else {
         tracing::info!("Rolling over session at parent {parent_id}");
         let _ = crate::infra::db::delete_sessions_for_chat(db, token_id, &session_id).await;
     }
     let comp_tokens = std::cmp::max(1, (full_len / 4) as u32);
-    let _ = record_usage(db, ctx.model, prompt_tokens, comp_tokens, Some(token_id)).await;
-    let finish_reason = if parsed.tool_calls.is_empty() { "stop" } else { "tool_calls" };
-    build_terminal_chunk(ctx.chat_id, ctx.created, ctx.model, prompt_tokens, comp_tokens, finish_reason)
+    let cached_tokens = compute_cached_tokens(parent_id, req_messages, prompt_tokens);
+    let _ = record_usage(
+        db,
+        ctx.model,
+        prompt_tokens,
+        comp_tokens,
+        cached_tokens,
+        Some(token_id),
+    )
+    .await;
+    let finish_reason = if parsed.tool_calls.is_empty() {
+        "stop"
+    } else {
+        "tool_calls"
+    };
+    build_terminal_chunk(
+        ctx.chat_id,
+        ctx.created,
+        ctx.model,
+        prompt_tokens,
+        comp_tokens,
+        cached_tokens,
+        finish_reason,
+    )
+}
+
+fn compute_cached_tokens(parent_id: i64, req_messages: &[ChatMessage], prompt_tokens: u32) -> u32 {
+    if parent_id == 0 {
+        return 0;
+    }
+    let last_chars = req_messages
+        .last()
+        .map(|m| m.text_content().len())
+        .unwrap_or(0);
+    prompt_tokens.saturating_sub((last_chars / 4).max(1) as u32)
 }
 
 async fn save_stream_session(
@@ -308,11 +361,13 @@ pub async fn handle_unary_response(
     let prompt_tokens = std::cmp::max(1, (prompt_chars / 4) as u32);
     let comp_chars = full_content.len() + reasoning.as_ref().map(|r| r.len()).unwrap_or(0);
     let comp_tokens = std::cmp::max(1, (comp_chars / 4) as u32);
+    let cached_tokens = compute_cached_tokens(parent_id, req_messages, prompt_tokens);
     let _ = record_usage(
         &state.db,
         &model,
         prompt_tokens,
         comp_tokens,
+        cached_tokens,
         Some(token_id),
     )
     .await;
@@ -325,15 +380,15 @@ pub async fn handle_unary_response(
         finish_reason: &finish_reason,
         prompt_tokens,
         comp_tokens,
+        cached_tokens,
     });
     Ok(Json(resp).into_response())
 }
 
 async fn read_unary_body(upstream_resp: reqwest::Response) -> (String, String) {
     let mut byte_stream = upstream_resp.bytes_stream();
-    let mut full_content = String::new();
-    let mut full_reasoning = String::new();
-    let mut buffer = String::new();
+    let (mut full_content, mut full_reasoning, mut buffer) =
+        (String::new(), String::new(), String::new());
     let mut think_open = false;
 
     while let Some(chunk_res) = byte_stream.next().await {
@@ -369,8 +424,12 @@ fn process_unary_lines(
             }
             SseLineResult::Chunks(chunks) => {
                 for item in chunks {
-                    if let Some(c) = item.content { full_content.push_str(&c); }
-                    if let Some(r) = item.reasoning { full_reasoning.push_str(&r); }
+                    if let Some(c) = item.content {
+                        full_content.push_str(&c);
+                    }
+                    if let Some(r) = item.reasoning {
+                        full_reasoning.push_str(&r);
+                    }
                 }
             }
             SseLineResult::None => {}
@@ -380,17 +439,10 @@ fn process_unary_lines(
 }
 
 fn finalize_content(full_content: &str, full_reasoning: &str) -> (String, Option<String>) {
-    let trimmed_c = full_content.trim();
-    let trimmed_r = full_reasoning.trim();
-
-    if trimmed_c.is_empty() && !trimmed_r.is_empty() {
-        (trimmed_r.to_string(), None)
+    let (tc, tr) = (full_content.trim(), full_reasoning.trim());
+    if tc.is_empty() && !tr.is_empty() {
+        (tr.to_string(), None)
     } else {
-        let reasoning = if trimmed_r.is_empty() {
-            None
-        } else {
-            Some(trimmed_r.to_string())
-        };
-        (trimmed_c.to_string(), reasoning)
+        (tc.to_string(), (!tr.is_empty()).then(|| tr.to_string()))
     }
 }

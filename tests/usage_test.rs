@@ -24,13 +24,13 @@ async fn test_db_usage_recording_and_summaries() {
     init_db(&conn).await.unwrap();
 
     // Record usage
-    record_usage(&conn, "deepseek-chat", 100, 200, Some(1))
+    record_usage(&conn, "deepseek-chat", 100, 200, 50, Some(1))
         .await
         .unwrap();
-    record_usage(&conn, "deepseek-chat", 400, 600, Some(1))
+    record_usage(&conn, "deepseek-chat", 400, 600, 300, Some(1))
         .await
         .unwrap();
-    record_usage(&conn, "deepseek-reasoner", 1000, 2000, Some(2))
+    record_usage(&conn, "deepseek-reasoner", 1000, 2000, 800, Some(2))
         .await
         .unwrap();
 
@@ -40,16 +40,20 @@ async fn test_db_usage_recording_and_summaries() {
     let today = summaries.iter().find(|s| s.period == "Today").unwrap();
     assert_eq!(today.requests, 3);
     assert_eq!(today.prompt_tokens, 1500);
+    assert_eq!(today.cached_tokens, 1150);
     assert_eq!(today.completion_tokens, 2800);
     assert_eq!(today.total_tokens, 4300);
+    assert!((today.cache_hit_rate() - 76.66).abs() < 0.1);
 
     let all_time = summaries.iter().find(|s| s.period == "All Time").unwrap();
     assert_eq!(all_time.requests, 3);
+    assert_eq!(all_time.cached_tokens, 1150);
     assert_eq!(all_time.total_tokens, 4300);
 
     let daily = get_daily_breakdown(&conn, 7).await.unwrap();
     assert_eq!(daily.len(), 1);
     assert_eq!(daily[0].requests, 3);
+    assert_eq!(daily[0].cached_tokens, 1150);
     assert_eq!(daily[0].total_tokens, 4300);
 
     let models = get_model_breakdown(&conn).await.unwrap();
@@ -65,13 +69,13 @@ async fn test_filtered_usage_queries() {
     let conn = open_db(":memory:").await.unwrap();
     init_db(&conn).await.unwrap();
 
-    record_usage(&conn, "deepseek-chat", 100, 200, Some(1))
+    record_usage(&conn, "deepseek-chat", 100, 200, 50, Some(1))
         .await
         .unwrap();
-    record_usage(&conn, "deepseek-chat", 400, 600, Some(1))
+    record_usage(&conn, "deepseek-chat", 400, 600, 300, Some(1))
         .await
         .unwrap();
-    record_usage(&conn, "deepseek-reasoner", 1000, 2000, Some(2))
+    record_usage(&conn, "deepseek-reasoner", 1000, 2000, 800, Some(2))
         .await
         .unwrap();
 
@@ -84,6 +88,7 @@ async fn test_filtered_usage_queries() {
         .unwrap();
     let chat_today = chat_summaries.iter().find(|s| s.period == "Today").unwrap();
     assert_eq!(chat_today.requests, 2);
+    assert_eq!(chat_today.cached_tokens, 350);
     assert_eq!(chat_today.total_tokens, 1300);
 
     let token2_filter = deeperseeker::domain::usage::UsageFilter {
@@ -99,6 +104,7 @@ async fn test_filtered_usage_queries() {
         .find(|s| s.period == "Today")
         .unwrap();
     assert_eq!(token2_today.requests, 1);
+    assert_eq!(token2_today.cached_tokens, 800);
     assert_eq!(token2_today.total_tokens, 3000);
 }
 
@@ -116,10 +122,13 @@ fn test_dashboard_template_metrics_rendering() {
         period: "Today".to_string(),
         requests: "15".to_string(),
         prompt_tokens: "44.9K".to_string(),
+        cached_tokens: "40.0K".to_string(),
+        cache_rate: "89.1%".to_string(),
         completion_tokens: "84".to_string(),
         total_tokens: "44.9K".to_string(),
         raw_requests: 15,
         raw_prompt_tokens: 44_850,
+        raw_cached_tokens: 40_000,
         raw_completion_tokens: 84,
         raw_total_tokens: 44_934,
     }];
@@ -131,11 +140,15 @@ fn test_dashboard_template_metrics_rendering() {
     ctx.insert("active_count", &1);
     ctx.insert("total_tokens_count", &1);
     ctx.insert("in_flight", &0);
+    ctx.insert("cache_hit_rate", &"89.1%");
+    ctx.insert("today_cached", &"40.0K");
     ctx.insert("port", &4000);
     ctx.insert("api_key", &"dseeker");
 
     let rendered = tera.render("dashboard.html", &ctx).unwrap();
     assert!(rendered.contains("44.9K"));
+    assert!(rendered.contains("40.0K"));
+    assert!(rendered.contains("89.1%"));
     assert!(rendered.contains("title=\"44934 tokens\""));
     assert!(rendered.contains("title=\"44850 tokens\""));
     assert!(rendered.contains("title=\"84 tokens\""));

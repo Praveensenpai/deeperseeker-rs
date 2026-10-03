@@ -14,11 +14,16 @@ pub async fn init_usage_table(conn: &Connection) -> Result<()> {
                 prompt_tokens INTEGER NOT NULL,
                 completion_tokens INTEGER NOT NULL,
                 total_tokens INTEGER NOT NULL,
-                token_id INTEGER
+                token_id INTEGER,
+                cached_tokens INTEGER DEFAULT 0
             );
             CREATE INDEX IF NOT EXISTS idx_usage_date ON request_usage(date);
             CREATE INDEX IF NOT EXISTS idx_usage_ts ON request_usage(timestamp);",
         )?;
+        let _ = c.execute(
+            "ALTER TABLE request_usage ADD COLUMN cached_tokens INTEGER DEFAULT 0",
+            [],
+        );
         Ok(())
     })
     .await
@@ -30,6 +35,7 @@ pub async fn record_usage(
     model: &str,
     prompt_tokens: u32,
     completion_tokens: u32,
+    cached_tokens: u32,
     token_id: Option<i64>,
 ) -> Result<()> {
     let now = std::time::SystemTime::now()
@@ -45,12 +51,13 @@ pub async fn record_usage(
     let total = (prompt_tokens + completion_tokens) as i64;
     let p = prompt_tokens as i64;
     let c = completion_tokens as i64;
+    let ca = cached_tokens as i64;
 
     conn.call(move |db| {
         db.execute(
-            "INSERT INTO request_usage (timestamp, date, model, prompt_tokens, completion_tokens, total_tokens, token_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            params![now, date_str, m, p, c, total, token_id],
+            "INSERT INTO request_usage (timestamp, date, model, prompt_tokens, completion_tokens, total_tokens, token_id, cached_tokens)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![now, date_str, m, p, c, total, token_id, ca],
         )?;
         Ok(())
     })
@@ -107,7 +114,7 @@ async fn fetch_period_summary(
     let p_name = period.to_string();
     conn.call(move |c| {
         let query = format!(
-            "SELECT COUNT(*), COALESCE(SUM(prompt_tokens), 0), COALESCE(SUM(completion_tokens), 0), COALESCE(SUM(total_tokens), 0)
+            "SELECT COUNT(*), COALESCE(SUM(prompt_tokens), 0), COALESCE(SUM(completion_tokens), 0), COALESCE(SUM(total_tokens), 0), COALESCE(SUM(cached_tokens), 0)
              FROM request_usage WHERE {}",
             condition
         );
@@ -117,12 +124,14 @@ async fn fetch_period_summary(
             let p: i64 = r.get(1)?;
             let comp: i64 = r.get(2)?;
             let tot: i64 = r.get(3)?;
+            let ca: i64 = r.get(4)?;
             Ok(UsageSummary {
                 period: p_name,
                 requests: reqs as u64,
                 prompt_tokens: p as u64,
                 completion_tokens: comp as u64,
                 total_tokens: tot as u64,
+                cached_tokens: ca as u64,
             })
         })?;
         Ok(row)
@@ -143,7 +152,7 @@ pub async fn get_filtered_daily_breakdown(
     let where_clause = build_where_clause("1=1", filter);
     conn.call(move |c| {
         let query = format!(
-            "SELECT date, COUNT(*), SUM(prompt_tokens), SUM(completion_tokens), SUM(total_tokens)
+            "SELECT date, COUNT(*), SUM(prompt_tokens), SUM(completion_tokens), SUM(total_tokens), COALESCE(SUM(cached_tokens), 0)
              FROM request_usage
              WHERE {}
              GROUP BY date
@@ -158,12 +167,14 @@ pub async fn get_filtered_daily_breakdown(
             let p: i64 = r.get(2)?;
             let comp: i64 = r.get(3)?;
             let tot: i64 = r.get(4)?;
+            let ca: i64 = r.get(5)?;
             Ok(DailyUsage {
                 date: d,
                 requests: reqs as u64,
                 prompt_tokens: p as u64,
                 completion_tokens: comp as u64,
                 total_tokens: tot as u64,
+                cached_tokens: ca as u64,
             })
         })?;
         let mut list = Vec::new();

@@ -1,4 +1,4 @@
-# CODEBASE.md: deeperseeker Semantic Digest — v0.2.20
+# CODEBASE.md: deeperseeker Semantic Digest
 
 > **Notice**: AI-optimized semantic index. Do not write narrative prose. Keep token density high.
 
@@ -23,7 +23,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn anthropic_messages (State (state) : State < AppState > , Json (req) : Json < AnthropicMessageRequest > ,) -> Result < Response , (StatusCode , Json < serde_json :: Value >) >
   ```
 
-### `src/api/chat.rs` (Role: api, Lines: 246)
+### `src/api/chat.rs` (Role: api, Lines: 292)
 - **Responsibility**: Core api logic in src/api/chat.rs
 - **Imports**: use crate :: api :: chat_stream :: { handle_streaming_response , handle_unary_response } , use crate :: api :: state :: AppState , use crate :: domain :: openai :: ChatCompletionRequest , use crate :: domain :: session :: compute_signature , use crate :: domain :: token :: Token , use crate :: infra :: db :: { find_session , mark_active , mark_limited , pick_token , touch_token } , use crate :: infra :: deepseek_client :: CompletionArgs , use crate :: infra :: media :: { resolve_message_media , MediaContext } , use crate :: infra :: prompt :: build_prompt_for_turn , use axum :: { extract :: State , http :: StatusCode , response :: Response , Json } , use serde_json :: json 
 - **Public Functions & Signatures**:
@@ -31,7 +31,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn chat_completions (State (state) : State < AppState > , Json (req) : Json < ChatCompletionRequest > ,) -> Result < Response , (StatusCode , Json < serde_json :: Value >) >
   ```
 
-### `src/api/chat_chunks.rs` (Role: api, Lines: 180)
+### `src/api/chat_chunks.rs` (Role: api, Lines: 189)
 - **Responsibility**: Core api logic in src/api/chat_chunks.rs
 - **Imports**: use crate :: domain :: openai :: { ChatChoice , ChatCompletionChunk , ChatCompletionResponse , ChunkChoice , ChunkDelta , ResponseMessage , ToolCall , Usage , } , use crate :: infra :: sse :: ExtractedChunk , use std :: time :: { SystemTime , UNIX_EPOCH } , use uuid :: Uuid 
 - **Types & Enums**:
@@ -45,11 +45,11 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn make_text_chunk (chat_id : & str , created : u64 , model : & str , text : & str ,) -> ChatCompletionChunk
   fn make_reasoning_chunk (chat_id : & str , created : u64 , model : & str , reasoning : & str ,) -> ChatCompletionChunk
   fn make_tool_calls_chunk (chat_id : & str , created : u64 , model : & str , tool_calls : Vec < ToolCall > ,) -> ChatCompletionChunk
-  fn build_terminal_chunk (chat_id : & str , created : u64 , model : & str , prompt_tokens : u32 , comp_tokens : u32 , finish_reason : & str ,) -> Option < String >
+  fn build_terminal_chunk (chat_id : & str , created : u64 , model : & str , prompt_tokens : u32 , comp_tokens : u32 , cached_tokens : u32 , finish_reason : & str ,) -> Option < String >
   fn current_timestamp () -> u64
   ```
 
-### `src/api/chat_stream.rs` (Role: api, Lines: 363)
+### `src/api/chat_stream.rs` (Role: api, Lines: 448)
 - **Responsibility**: Core api logic in src/api/chat_stream.rs
 - **Imports**: use crate :: api :: chat_chunks :: { build_chat_response , build_terminal_chunk , create_openai_chunks , current_timestamp , make_reasoning_chunk , make_text_chunk , make_tool_calls_chunk , ChatResponseArgs , } , use crate :: api :: state :: AppState , use crate :: domain :: openai :: ChatMessage , use crate :: domain :: session :: { compute_next_signature , next_parent_id , Session } , use crate :: infra :: db :: save_session , use crate :: infra :: dsml :: { find_dsml_block_start , parse_dsml , safe_unambiguous_len , ParsedDsml } , pub use crate :: infra :: sse :: { drain_sse_lines , extract_chunks_from_event , parse_sse_line , ExtractedChunk , SseLineResult , } , use crate :: infra :: usage_db :: record_usage , use axum :: { body :: Body , http :: { header :: CONTENT_TYPE , StatusCode } , response :: { IntoResponse , Response } , Json , } , use futures :: StreamExt , use uuid :: Uuid 
 - **Public Functions & Signatures**:
@@ -58,7 +58,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn handle_unary_response (state : & AppState , model : String , token_id : i64 , session_id : String , parent_id : i64 , req_messages : & [ChatMessage] , upstream_resp : reqwest :: Response ,) -> Result < Response , (StatusCode , String) >
   ```
 
-### `src/api/dashboard.rs` (Role: api, Lines: 203)
+### `src/api/dashboard.rs` (Role: api, Lines: 219)
 - **Responsibility**: Core api logic in src/api/dashboard.rs
 - **Imports**: use crate :: api :: state :: AppState , use crate :: domain :: usage :: format_metric , use crate :: infra :: db :: { add_token as db_add_token , delete_token as db_delete_token , get_tokens } , use axum :: { extract :: { Form , Path , State } , http :: { header :: { COOKIE , SET_COOKIE } , HeaderMap , StatusCode , } , response :: { Html , IntoResponse , Redirect , Response } , } , use serde :: { Deserialize , Serialize } , use sha2 :: { Digest , Sha256 } , use tera :: Context 
 - **Types & Enums**:
@@ -175,7 +175,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn test_tokens (target_id : Option < i64 > , db_path : & str) -> Result < () >
   ```
 
-### `src/cli/usage_cmd.rs` (Role: cli, Lines: 179)
+### `src/cli/usage_cmd.rs` (Role: cli, Lines: 180)
 - **Responsibility**: Core cli logic in src/cli/usage_cmd.rs
 - **Imports**: use crate :: domain :: usage :: { format_metric , UsageFilter } , use crate :: infra :: db :: { get_tokens , init_db , open_db } , use crate :: infra :: usage_db :: { get_filtered_daily_breakdown , get_filtered_model_breakdown , get_filtered_summaries , } , use anyhow :: { Context , Result } , use serde_json :: json 
 - **Types & Enums**:
@@ -230,7 +230,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   pub struct AnthropicUsage
   ```
 
-### `src/domain/openai.rs` (Role: domain, Lines: 365)
+### `src/domain/openai.rs` (Role: domain, Lines: 375)
 - **Responsibility**: Core domain logic in src/domain/openai.rs
 - **Imports**: use serde :: { Deserialize , Serialize } 
 - **Types & Enums**:
@@ -249,6 +249,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   pub struct ChatCompletionChunk
   pub struct ChunkChoice
   pub struct ChunkDelta
+  pub struct PromptTokensDetails
   pub struct Usage
   pub struct ModelObject
   pub struct ModelList
@@ -267,7 +268,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn is_search_requested (& self) -> bool
   ```
 
-### `src/domain/session.rs` (Role: domain, Lines: 92)
+### `src/domain/session.rs` (Role: domain, Lines: 100)
 - **Responsibility**: Core domain logic in src/domain/session.rs
 - **Imports**: use crate :: domain :: openai :: { ChatMessage , ToolCall } , use serde :: { Deserialize , Serialize } , use sha2 :: { Digest , Sha256 } 
 - **Types & Enums**:
@@ -314,7 +315,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   pub struct FileRecord
   ```
 
-### `src/domain/usage.rs` (Role: domain, Lines: 63)
+### `src/domain/usage.rs` (Role: domain, Lines: 79)
 - **Responsibility**: Core domain logic in src/domain/usage.rs
 - **Imports**: use serde :: { Deserialize , Serialize } 
 - **Types & Enums**:
@@ -327,6 +328,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   ```
 - **Public Functions & Signatures**:
   ```rust
+  fn cache_hit_rate (& self) -> f64
   fn format_metric (val : u64 , raw : bool) -> String
   ```
 
@@ -344,7 +346,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn resolve_db_path (custom : Option < & str >) -> String
   ```
 
-### `src/infra/db.rs` (Role: infra, Lines: 356)
+### `src/infra/db.rs` (Role: infra, Lines: 361)
 - **Responsibility**: Core infra logic in src/infra/db.rs
 - **Imports**: use crate :: domain :: session :: Session , use crate :: domain :: token :: Token , use anyhow :: { Context , Result } , use rusqlite :: params , use std :: collections :: HashMap , use std :: time :: { SystemTime , UNIX_EPOCH } , use tokio_rusqlite :: Connection 
 - **Public Functions & Signatures**:
@@ -367,9 +369,9 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn get_file_token (conn : & Connection , file_id : & str) -> Result < Option < i64 > >
   ```
 
-### `src/infra/deepseek_client.rs` (Role: infra, Lines: 254)
+### `src/infra/deepseek_client.rs` (Role: infra, Lines: 274)
 - **Responsibility**: Core infra logic in src/infra/deepseek_client.rs
-- **Imports**: use crate :: domain :: upstream :: { CreateChatResponse , PowChallenge , PowChallengeWrapper } , use anyhow :: { anyhow , Context , Result } , use reqwest :: header :: { HeaderMap , HeaderValue , AUTHORIZATION , CONTENT_TYPE , USER_AGENT } , use reqwest :: Client , use serde_json :: json 
+- **Imports**: use crate :: domain :: upstream :: { CreateChatResponse , PowChallenge , PowChallengeWrapper } , use anyhow :: { anyhow , Context , Result } , use reqwest :: header :: { HeaderMap , HeaderValue , AUTHORIZATION , CONTENT_TYPE , USER_AGENT } , use reqwest :: Client , use serde_json :: json , use std :: time :: Duration 
 - **Types & Enums**:
   ```rust
   pub struct DeepSeekClient
@@ -387,7 +389,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn fetch_bytes (& self , url : & str) -> Result < Vec < u8 > >
   ```
 
-### `src/infra/dsml.rs` (Role: infra, Lines: 365)
+### `src/infra/dsml.rs` (Role: infra, Lines: 450)
 - **Responsibility**: Core infra logic in src/infra/dsml.rs
 - **Imports**: use crate :: domain :: openai :: { FunctionCall , ToolCall } , use once_cell :: sync :: Lazy , use regex :: Regex , use serde_json :: Value , use uuid :: Uuid 
 - **Types & Enums**:
@@ -401,7 +403,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn parse_dsml (text : & str) -> ParsedDsml
   ```
 
-### `src/infra/media.rs` (Role: infra, Lines: 208)
+### `src/infra/media.rs` (Role: infra, Lines: 206)
 - **Responsibility**: Core infra logic in src/infra/media.rs
 - **Imports**: use crate :: domain :: openai :: { ChatMessage , MessageContent } , use crate :: infra :: db :: record_file , use crate :: infra :: deepseek_client :: DeepSeekClient , use crate :: infra :: pow :: PowSolver , use crate :: infra :: rehome :: rehome_foreign_files , use anyhow :: { anyhow , Context , Result } , use base64 :: { engine :: general_purpose :: STANDARD as B64 , Engine as _ } , use std :: sync :: Arc , use tokio_rusqlite :: Connection 
 - **Types & Enums**:
@@ -429,7 +431,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn solve (& self , challenge : & PowChallenge , target_path : & str) -> Result < String >
   ```
 
-### `src/infra/prompt.rs` (Role: infra, Lines: 176)
+### `src/infra/prompt.rs` (Role: infra, Lines: 204)
 - **Responsibility**: Core infra logic in src/infra/prompt.rs
 - **Imports**: use crate :: domain :: openai :: ChatMessage , use serde_json :: Value 
 - **Public Functions & Signatures**:
@@ -446,7 +448,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn rehome_foreign_files (db : & Connection , client : & DeepSeekClient , solver : & Arc < PowSolver > , file_ids : & [String] , target_token_id : i64 , target_token : & str ,) -> Result < Vec < String > >
   ```
 
-### `src/infra/sse.rs` (Role: infra, Lines: 175)
+### `src/infra/sse.rs` (Role: infra, Lines: 186)
 - **Responsibility**: Core infra logic in src/infra/sse.rs
 - **Types & Enums**:
   ```rust
@@ -460,13 +462,13 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn extract_chunks_from_event (val : & serde_json :: Value , think_open : & mut bool ,) -> Vec < ExtractedChunk >
   ```
 
-### `src/infra/usage_db.rs` (Role: infra, Lines: 216)
+### `src/infra/usage_db.rs` (Role: infra, Lines: 227)
 - **Responsibility**: Core infra logic in src/infra/usage_db.rs
 - **Imports**: use crate :: domain :: usage :: { DailyUsage , ModelUsage , UsageFilter , UsageSummary } , use anyhow :: { Context , Result } , use rusqlite :: params , use tokio_rusqlite :: Connection 
 - **Public Functions & Signatures**:
   ```rust
   async fn init_usage_table (conn : & Connection) -> Result < () >
-  async fn record_usage (conn : & Connection , model : & str , prompt_tokens : u32 , completion_tokens : u32 , token_id : Option < i64 > ,) -> Result < () >
+  async fn record_usage (conn : & Connection , model : & str , prompt_tokens : u32 , completion_tokens : u32 , cached_tokens : u32 , token_id : Option < i64 > ,) -> Result < () >
   async fn get_all_summaries (conn : & Connection) -> Result < Vec < UsageSummary > >
   async fn get_filtered_summaries (conn : & Connection , filter : & UsageFilter ,) -> Result < Vec < UsageSummary > >
   async fn get_daily_breakdown (conn : & Connection , limit : usize) -> Result < Vec < DailyUsage > >
@@ -494,7 +496,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
 - **Responsibility**: Core general logic in src/main.rs
 - **Imports**: use anyhow :: { Context , Result } , use clap :: Parser , use deeperseeker :: api :: build_router , use deeperseeker :: api :: state :: AppState , use deeperseeker :: cli :: diagnostic :: run_diagnostics , use deeperseeker :: cli :: service :: { install_user_service , service_status , uninstall_user_service } , use deeperseeker :: cli :: token_cmd :: { add_token , list_tokens , remove_token , test_tokens } , use deeperseeker :: cli :: usage_cmd :: display_usage , use deeperseeker :: cli :: { Cli , Commands , ServeArgs , ServiceArgs , ServiceSubcommands , TokenArgs , TokenSubcommands , } , use deeperseeker :: config :: AppConfig , use deeperseeker :: infra :: db :: { init_db , open_db } , use deeperseeker :: infra :: deepseek_client :: DeepSeekClient , use deeperseeker :: infra :: pow :: PowSolver , use deeperseeker :: tui :: run_status , use std :: collections :: HashMap , use std :: sync :: Arc , use tera :: Tera , use tokio :: net :: TcpListener , use tokio :: sync :: Mutex , use tracing :: info 
 
-### `src/tui/tabs.rs` (Role: tui, Lines: 264)
+### `src/tui/tabs.rs` (Role: tui, Lines: 278)
 - **Responsibility**: Core tui logic in src/tui/tabs.rs
 - **Imports**: use crate :: domain :: token :: Token , use crate :: domain :: usage :: { format_metric , UsageSummary } , use crate :: tui :: views :: RenderState , use ratatui :: { layout :: { Constraint , Direction , Layout , Rect } , style :: { Color , Modifier , Style } , text :: { Line , Span } , widgets :: { Block , BorderType , Borders , Cell , Gauge , Paragraph , Row , Table , Wrap } , Frame , } 
 - **Public Functions & Signatures**:

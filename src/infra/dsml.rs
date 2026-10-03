@@ -19,15 +19,12 @@ static PARAM_TAG_RE: Lazy<Regex> = Lazy::new(|| {
 });
 
 static HERMES_FUNCTION_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?is)<function=([a-zA-Z0-9_\-]+)>(.*?)(?:</function>|$)")
-        .expect("valid regex")
+    Regex::new(r"(?is)<function=([a-zA-Z0-9_\-]+)>(.*?)(?:</function>|$)").expect("valid regex")
 });
 
 static HERMES_PARAM_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?is)<parameter=([a-zA-Z0-9_\-]+)>(.*?)(?:</parameter>|$)")
-        .expect("valid regex")
+    Regex::new(r"(?is)<parameter=([a-zA-Z0-9_\-]+)>(.*?)(?:</parameter>|$)").expect("valid regex")
 });
-
 
 static ATTR_NAME_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r#"(?i)\bname\s*=\s*["']([^"']+)["']"#).expect("valid regex"));
@@ -82,9 +79,19 @@ fn is_potential_dsml_prefix(suffix: &str) -> bool {
         return true;
     }
     const PREFIXES: &[&str] = &[
-        "dsml", "invoke", "tool_call", "tool_calls", "function_call", "function", "calls", "parameter", "call",
+        "dsml",
+        "invoke",
+        "tool_call",
+        "tool_calls",
+        "function_call",
+        "function",
+        "calls",
+        "parameter",
+        "call",
     ];
-    PREFIXES.iter().any(|p| p.starts_with(trimmed) || trimmed.starts_with(p))
+    PREFIXES
+        .iter()
+        .any(|p| p.starts_with(trimmed) || trimmed.starts_with(p))
 }
 
 pub fn parse_dsml(text: &str) -> ParsedDsml {
@@ -109,11 +116,17 @@ pub fn parse_dsml(text: &str) -> ParsedDsml {
             text[..pos].trim().to_string()
         } else {
             let without_blocks = STRIP_BLOCKS_RE.replace_all(text, "");
-            STRIP_TAGS_RE.replace_all(&without_blocks, "").trim().to_string()
+            STRIP_TAGS_RE
+                .replace_all(&without_blocks, "")
+                .trim()
+                .to_string()
         }
     } else {
         let without_blocks = STRIP_BLOCKS_RE.replace_all(text, "");
-        STRIP_TAGS_RE.replace_all(&without_blocks, "").trim().to_string()
+        STRIP_TAGS_RE
+            .replace_all(&without_blocks, "")
+            .trim()
+            .to_string()
     };
 
     ParsedDsml {
@@ -210,7 +223,11 @@ fn extract_json_tool_calls(text: &str, session_prefix: &str, tool_calls: &mut Ve
             let offset = de.byte_offset();
             search_idx = json_start + offset;
 
-            let Some(name) = val.get("name").or_else(|| val.get("tool")).and_then(|v| v.as_str()) else {
+            let Some(name) = val
+                .get("name")
+                .or_else(|| val.get("tool"))
+                .and_then(|v| v.as_str())
+            else {
                 continue;
             };
             let args_val = val.get("arguments").or_else(|| val.get("parameters"));
@@ -223,7 +240,11 @@ fn extract_json_tool_calls(text: &str, session_prefix: &str, tool_calls: &mut Ve
             let prefix_len = 8.min(session_prefix.len());
             tool_calls.push(ToolCall {
                 index: Some(tool_calls.len()),
-                id: format!("call_{}_{}", &session_prefix[..prefix_len], tool_calls.len()),
+                id: format!(
+                    "call_{}_{}",
+                    &session_prefix[..prefix_len],
+                    tool_calls.len()
+                ),
                 r#type: "function".to_string(),
                 function: FunctionCall {
                     name: name.to_string(),
@@ -373,7 +394,10 @@ mod tests {
         assert!(parsed.text_content.is_empty());
         assert_eq!(parsed.tool_calls.len(), 1);
         assert_eq!(parsed.tool_calls[0].function.name, "bash");
-        assert_eq!(parsed.tool_calls[0].function.arguments, r#"{"command":"cargo check"}"#);
+        assert_eq!(
+            parsed.tool_calls[0].function.arguments,
+            r#"{"command":"cargo check"}"#
+        );
     }
 
     #[test]
@@ -383,8 +407,14 @@ mod tests {
         assert_eq!(parsed.text_content, "Here is the edit.");
         assert_eq!(parsed.tool_calls.len(), 1);
         assert_eq!(parsed.tool_calls[0].function.name, "edit");
-        assert!(parsed.tool_calls[0].function.arguments.contains("src/services.py"));
-        assert!(parsed.tool_calls[0].function.arguments.contains("def foo(): { return 1; }"));
+        assert!(parsed.tool_calls[0]
+            .function
+            .arguments
+            .contains("src/services.py"));
+        assert!(parsed.tool_calls[0]
+            .function
+            .arguments
+            .contains("def foo(): { return 1; }"));
     }
 
     #[test]
@@ -404,8 +434,17 @@ mod tests {
         assert_eq!(parsed.tool_calls.len(), 1);
         let call = &parsed.tool_calls[0];
         assert_eq!(call.function.name, "edit");
-        assert!(call.function.arguments.contains(r#""filePath":"src/services.py""#));
-        assert!(call.function.arguments.contains(r#""oldString":"def old(): pass""#));
-        assert!(call.function.arguments.contains(r#""newString":"def new(): pass""#));
+        assert!(call
+            .function
+            .arguments
+            .contains(r#""filePath":"src/services.py""#));
+        assert!(call
+            .function
+            .arguments
+            .contains(r#""oldString":"def old(): pass""#));
+        assert!(call
+            .function
+            .arguments
+            .contains(r#""newString":"def new(): pass""#));
     }
 }

@@ -179,7 +179,9 @@ impl DeepSeekClient {
 
         if !is_sse {
             let text = resp.text().await.unwrap_or_default();
-            return Err(anyhow!("DeepSeek upstream error (non-SSE response): {text}"));
+            return Err(anyhow!(
+                "DeepSeek upstream error (non-SSE response): {text}"
+            ));
         }
 
         Ok(resp)
@@ -263,8 +265,10 @@ impl DeepSeekClient {
             return Err(anyhow!("Remote URL HTTP {status}"));
         }
 
-        let bytes = resp.bytes().await.context("Failed reading response bytes")?;
+        let bytes = resp
+            .bytes()
+            .await
+            .context("Failed reading response bytes")?;
         Ok(bytes.to_vec())
     }
 }
-

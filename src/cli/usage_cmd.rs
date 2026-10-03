@@ -85,14 +85,14 @@ pub async fn display_usage(args: UsageViewArgs) -> Result<()> {
 }
 
 fn render_summary_table(summaries: &[crate::domain::usage::UsageSummary], raw: bool) {
-    println!("╭─────────────────────────────────────────────────────────────────────────────╮");
-    println!("│  📊 DeeperSeeker Token & Request Analytics                                  │");
-    println!("├─────────────┬──────────┬──────────────┬──────────────┬──────────────────────┤");
+    println!("╭─────────────────────────────────────────────────────────────────────────────────────────╮");
+    println!("│  📊 DeeperSeeker Token & Request Analytics                                              │");
+    println!("├─────────────┬──────────┬──────────────┬──────────────┬──────────────┬───────────────────┤");
     println!(
-        "│ {:<11} │ {:<8} │ {:<12} │ {:<12} │ {:<20} │",
-        "Period", "Requests", "Prompt (In)", "Compl (Out)", "Total Tokens"
+        "│ {:<11} │ {:<8} │ {:<12} │ {:<12} │ {:<12} │ {:<17} │",
+        "Period", "Requests", "Prompt (In)", "Cached (Save)", "Compl (Out)", "Total Tokens"
     );
-    println!("├─────────────┼──────────┼──────────────┼──────────────┼──────────────────────┤");
+    println!("├─────────────┼──────────┼──────────────┼──────────────┼──────────────┼───────────────────┤");
 
     for s in summaries {
         let reqs = if raw {
@@ -101,15 +101,16 @@ fn render_summary_table(summaries: &[crate::domain::usage::UsageSummary], raw: b
             format_metric(s.requests, false)
         };
         let prompt = format_metric(s.prompt_tokens, raw);
+        let cached = format_metric(s.cached_tokens, raw);
         let compl = format_metric(s.completion_tokens, raw);
         let total = format_metric(s.total_tokens, raw);
 
         println!(
-            "│ {:<11} │ {:<8} │ {:<12} │ {:<12} │ {:<20} │",
-            s.period, reqs, prompt, compl, total
+            "│ {:<11} │ {:<8} │ {:<12} │ {:<12} │ {:<12} │ {:<17} │",
+            s.period, reqs, prompt, cached, compl, total
         );
     }
-    println!("╰─────────────┴──────────┴──────────────┴──────────────┴──────────────────────╯\n");
+    println!("╰─────────────┴──────────┴──────────────┴──────────────┴──────────────┴───────────────────╯\n");
 }
 
 fn render_daily_histogram(daily: &[crate::domain::usage::DailyUsage], raw: bool) {

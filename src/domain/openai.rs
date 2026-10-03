@@ -152,7 +152,10 @@ pub struct ChatCompletionRequest {
 impl ChatCompletionRequest {
     pub fn is_reasoning_requested(&self) -> bool {
         let model_lower = self.model.to_lowercase();
-        if model_lower.contains("reasoner") || model_lower.contains("r1") || model_lower.contains("think") {
+        if model_lower.contains("reasoner")
+            || model_lower.contains("r1")
+            || model_lower.contains("think")
+        {
             return true;
         }
         if let Some(effort) = &self.reasoning_effort {
@@ -253,11 +256,18 @@ pub struct ChunkDelta {
     pub tool_calls: Option<Vec<ToolCall>>,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub struct PromptTokensDetails {
+    pub cached_tokens: u32,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct Usage {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
     pub total_tokens: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_tokens_details: Option<PromptTokensDetails>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

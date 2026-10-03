@@ -62,11 +62,16 @@ pub async fn init_db(conn: &Connection) -> Result<()> {
                 prompt_tokens INTEGER NOT NULL,
                 completion_tokens INTEGER NOT NULL,
                 total_tokens INTEGER NOT NULL,
-                token_id INTEGER
+                token_id INTEGER,
+                cached_tokens INTEGER DEFAULT 0
             );
             CREATE INDEX IF NOT EXISTS idx_usage_date ON request_usage(date);
             CREATE INDEX IF NOT EXISTS idx_usage_ts ON request_usage(timestamp);",
         )?;
+        let _ = c.execute(
+            "ALTER TABLE request_usage ADD COLUMN cached_tokens INTEGER DEFAULT 0",
+            [],
+        );
         Ok(())
     })
     .await

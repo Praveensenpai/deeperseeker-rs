@@ -96,12 +96,14 @@ fn build_usage_row(s: &UsageSummary) -> Row<'_> {
         Cell::from(s.period.clone()),
         Cell::from(format_metric(s.requests, false)),
         Cell::from(format_metric(s.prompt_tokens, false)),
+        Cell::from(format_metric(s.cached_tokens, false)).style(Style::default().fg(Color::Cyan)),
         Cell::from(format_metric(s.completion_tokens, false)),
         Cell::from(format_metric(s.total_tokens, false)).style(
             Style::default()
                 .fg(Color::Green)
                 .add_modifier(Modifier::BOLD),
         ),
+        Cell::from(format!("{:.1}%", s.cache_hit_rate())).style(Style::default().fg(Color::Cyan)),
     ])
 }
 
@@ -122,6 +124,11 @@ pub fn render_usage_tab(f: &mut Frame, area: Rect, summaries: &[UsageSummary]) {
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
         ),
+        Cell::from("Cached (Save)").style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
         Cell::from("Compl (Out)").style(
             Style::default()
                 .fg(Color::Cyan)
@@ -132,16 +139,23 @@ pub fn render_usage_tab(f: &mut Frame, area: Rect, summaries: &[UsageSummary]) {
                 .fg(Color::Green)
                 .add_modifier(Modifier::BOLD),
         ),
+        Cell::from("Hit Rate").style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
     ])
     .bottom_margin(1);
 
     let rows: Vec<Row> = summaries.iter().map(build_usage_row).collect();
     let widths = [
-        Constraint::Length(14),
         Constraint::Length(12),
-        Constraint::Length(16),
-        Constraint::Length(16),
-        Constraint::Min(18),
+        Constraint::Length(10),
+        Constraint::Length(13),
+        Constraint::Length(13),
+        Constraint::Length(13),
+        Constraint::Length(14),
+        Constraint::Min(10),
     ];
 
     let table = Table::new(rows, widths).header(header).block(

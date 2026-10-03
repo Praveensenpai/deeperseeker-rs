@@ -40,10 +40,13 @@ pub struct DashboardSummaryView {
     pub prompt_tokens: String,
     pub completion_tokens: String,
     pub total_tokens: String,
+    pub cached_tokens: String,
+    pub cache_rate: String,
     pub raw_requests: u64,
     pub raw_prompt_tokens: u64,
     pub raw_completion_tokens: u64,
     pub raw_total_tokens: u64,
+    pub raw_cached_tokens: u64,
 }
 
 pub async fn show_login(State(state): State<AppState>) -> Response {
@@ -105,7 +108,15 @@ pub async fn show_dashboard(State(state): State<AppState>, headers: HeaderMap) -
             status: tok.status,
         })
         .collect();
-    let summary_views = map_summary_views(summaries);
+    let today_sum = summaries.iter().find(|s| s.period == "Today");
+    let (cache_hit_rate, today_cached) = match today_sum {
+        Some(t) => (
+            format!("{:.1}%", t.cache_hit_rate()),
+            format_metric(t.cached_tokens, false),
+        ),
+        None => ("0.0%".to_string(), "0".to_string()),
+    };
+    let summary_views = map_summary_views(&summaries);
 
     let mut ctx = Context::new();
     ctx.insert("tokens", &views);
@@ -113,6 +124,8 @@ pub async fn show_dashboard(State(state): State<AppState>, headers: HeaderMap) -
     ctx.insert("active_count", &active_count);
     ctx.insert("total_tokens_count", &views.len());
     ctx.insert("in_flight", &in_flight_count);
+    ctx.insert("cache_hit_rate", &cache_hit_rate);
+    ctx.insert("today_cached", &today_cached);
     ctx.insert("version", env!("CARGO_PKG_VERSION"));
     ctx.insert("port", &state.config.port);
     ctx.insert("api_key", &state.config.api_key);
@@ -124,20 +137,23 @@ pub async fn show_dashboard(State(state): State<AppState>, headers: HeaderMap) -
 }
 
 fn map_summary_views(
-    summaries: Vec<crate::domain::usage::UsageSummary>,
+    summaries: &[crate::domain::usage::UsageSummary],
 ) -> Vec<DashboardSummaryView> {
     summaries
-        .into_iter()
+        .iter()
         .map(|s| DashboardSummaryView {
-            period: s.period,
+            period: s.period.clone(),
             requests: format_metric(s.requests, false),
             prompt_tokens: format_metric(s.prompt_tokens, false),
             completion_tokens: format_metric(s.completion_tokens, false),
             total_tokens: format_metric(s.total_tokens, false),
+            cached_tokens: format_metric(s.cached_tokens, false),
+            cache_rate: format!("{:.1}%", s.cache_hit_rate()),
             raw_requests: s.requests,
             raw_prompt_tokens: s.prompt_tokens,
             raw_completion_tokens: s.completion_tokens,
             raw_total_tokens: s.total_tokens,
+            raw_cached_tokens: s.cached_tokens,
         })
         .collect()
 }

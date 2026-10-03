@@ -27,17 +27,30 @@ pub fn format_tools_section(tools: &[Value]) -> Option<String> {
     for tool in tools {
         if let Some(fn_obj) = tool.get("function") {
             let name = fn_obj.get("name").and_then(|v| v.as_str()).unwrap_or("");
-            let desc = fn_obj.get("description").and_then(|v| v.as_str()).unwrap_or("");
-            let params = fn_obj.get("parameters").cloned().unwrap_or(serde_json::json!({}));
-            parts.push(format!("Tool: {name}\nDescription: {desc}\nParameters: {params}"));
+            let desc = fn_obj
+                .get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let params = fn_obj
+                .get("parameters")
+                .cloned()
+                .unwrap_or(serde_json::json!({}));
+            parts.push(format!(
+                "Tool: {name}\nDescription: {desc}\nParameters: {params}"
+            ));
         } else if let Some(name) = tool.get("name").and_then(|v| v.as_str()) {
-            let desc = tool.get("description").and_then(|v| v.as_str()).unwrap_or("");
+            let desc = tool
+                .get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             let params = tool
                 .get("input_schema")
                 .or_else(|| tool.get("parameters"))
                 .cloned()
                 .unwrap_or(serde_json::json!({}));
-            parts.push(format!("Tool: {name}\nDescription: {desc}\nParameters: {params}"));
+            parts.push(format!(
+                "Tool: {name}\nDescription: {desc}\nParameters: {params}"
+            ));
         }
     }
     if parts.is_empty() {
@@ -85,9 +98,9 @@ fn has_media_attachments(msg: &ChatMessage) -> bool {
     let crate::domain::openai::MessageContent::Parts(parts) = &msg.content else {
         return false;
     };
-    parts.iter().any(|p| {
-        p.image_url.is_some() || p.file.is_some() || p.url.is_some() || p.data.is_some()
-    })
+    parts
+        .iter()
+        .any(|p| p.image_url.is_some() || p.file.is_some() || p.url.is_some() || p.data.is_some())
 }
 
 fn extract_system_prompt(messages: &[ChatMessage], has_tools: bool) -> Option<String> {

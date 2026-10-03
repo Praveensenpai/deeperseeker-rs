@@ -14,10 +14,14 @@ pub struct ChatResponseArgs<'a> {
     pub finish_reason: &'a str,
     pub prompt_tokens: u32,
     pub comp_tokens: u32,
+    pub cached_tokens: u32,
 }
 
 pub fn build_chat_response(args: ChatResponseArgs) -> ChatCompletionResponse {
     let total_tokens = args.prompt_tokens + args.comp_tokens;
+    let details = (args.cached_tokens > 0).then_some(crate::domain::openai::PromptTokensDetails {
+        cached_tokens: args.cached_tokens,
+    });
     ChatCompletionResponse {
         id: format!("chatcmpl-{}", Uuid::new_v4()),
         object: "chat.completion".to_string(),
@@ -37,6 +41,7 @@ pub fn build_chat_response(args: ChatResponseArgs) -> ChatCompletionResponse {
             prompt_tokens: args.prompt_tokens,
             completion_tokens: args.comp_tokens,
             total_tokens,
+            prompt_tokens_details: details,
         },
     }
 }
@@ -151,8 +156,11 @@ pub fn build_terminal_chunk(
     model: &str,
     prompt_tokens: u32,
     comp_tokens: u32,
+    cached_tokens: u32,
     finish_reason: &str,
 ) -> Option<String> {
+    let details =
+        (cached_tokens > 0).then_some(crate::domain::openai::PromptTokensDetails { cached_tokens });
     let terminal_chunk = ChatCompletionChunk {
         id: chat_id.to_string(),
         object: "chat.completion.chunk".to_string(),
@@ -167,6 +175,7 @@ pub fn build_terminal_chunk(
             prompt_tokens,
             completion_tokens: comp_tokens,
             total_tokens: prompt_tokens + comp_tokens,
+            prompt_tokens_details: details,
         }),
     };
     serde_json::to_string(&terminal_chunk).ok()

@@ -24,6 +24,11 @@
         <span style="font-size: 0.75rem; color: var(--text-muted);">Aggregated Usage</span>
     </div>
     <div class="metric-card">
+        <span class="metric-label">Cache Hit Rate</span>
+        <span class="metric-value" style="color: var(--accent-cyan);">{{ cache_hit_rate }}</span>
+        <span style="font-size: 0.75rem; color: var(--text-muted);">{{ today_cached }} saved today</span>
+    </div>
+    <div class="metric-card">
         <span class="metric-label">Gateway Endpoint</span>
         <span class="metric-value" style="font-size: 1.1rem; color: var(--accent-cyan);">:{{ port }}/v1</span>
         <span style="font-size: 0.75rem; color: var(--text-muted);">API Key: <code>{{ api_key }}</code></span>
@@ -151,8 +156,10 @@
                     <th>Period</th>
                     <th>Requests</th>
                     <th>Prompt (Input)</th>
+                    <th>Cached (Saved)</th>
                     <th>Completion (Output)</th>
                     <th style="color: var(--accent-emerald);">Total Tokens</th>
+                    <th>Hit Rate</th>
                 </tr>
             </thead>
             <tbody>
@@ -161,8 +168,10 @@
                     <td style="font-weight: 600; color: var(--text-primary);">{{ s.period }}</td>
                     <td style="font-family: var(--font-mono);" title="{{ s.raw_requests }} requests">{{ s.requests }}</td>
                     <td style="font-family: var(--font-mono);" title="{{ s.raw_prompt_tokens }} tokens">{{ s.prompt_tokens }}</td>
+                    <td style="font-family: var(--font-mono); color: var(--accent-cyan);" title="{{ s.raw_cached_tokens }} tokens saved">{{ s.cached_tokens }}</td>
                     <td style="font-family: var(--font-mono);" title="{{ s.raw_completion_tokens }} tokens">{{ s.completion_tokens }}</td>
                     <td style="font-family: var(--font-mono); font-weight: 700; color: var(--accent-emerald);" title="{{ s.raw_total_tokens }} tokens">{{ s.total_tokens }}</td>
+                    <td style="font-family: var(--font-mono); color: var(--accent-cyan);">{{ s.cache_rate }}</td>
                 </tr>
                 {% endfor %}
             </tbody>

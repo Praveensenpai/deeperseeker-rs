@@ -183,9 +183,7 @@ mod tests {
             ("image/jpeg", "jpg")
         );
         assert_eq!(detect_image_format(b"GIF89a"), ("image/gif", "gif"));
-        let webp_bytes = [
-            b'R', b'I', b'F', b'F', 0, 0, 0, 0, b'W', b'E', b'B', b'P',
-        ];
+        let webp_bytes = [b'R', b'I', b'F', b'F', 0, 0, 0, 0, b'W', b'E', b'B', b'P'];
         assert_eq!(detect_image_format(&webp_bytes), ("image/webp", "webp"));
     }
 

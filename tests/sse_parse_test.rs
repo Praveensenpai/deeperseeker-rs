@@ -77,7 +77,8 @@ fn test_sse_error_detection() {
     use deeperseeker::infra::sse::{parse_sse_line, SseLineResult};
     let mut think_open = false;
 
-    let err_line = "data: {\"code\": 40005, \"msg\": \"There is a message being generated\", \"data\": null}";
+    let err_line =
+        "data: {\"code\": 40005, \"msg\": \"There is a message being generated\", \"data\": null}";
     match parse_sse_line(err_line, &mut think_open) {
         SseLineResult::Error(code, msg) => {
             assert_eq!(code, 40005);
