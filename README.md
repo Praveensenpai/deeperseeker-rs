@@ -308,9 +308,36 @@ Configure `deeperseeker-rs` as a custom provider in `~/.config/opencode/opencode
             "output": ["text"]
           }
         },
+        "v4.1flash-think": {
+          "name": "DeepSeek V4.1 Flash (Deep Think)",
+          "attachment": true,
+          "reasoning": true,
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          }
+        },
+        "v4.1flash-search": {
+          "name": "DeepSeek V4.1 Flash (Web Search)",
+          "attachment": true,
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          }
+        },
+        "v4.1flash-think-search": {
+          "name": "DeepSeek V4.1 Flash (Think + Search)",
+          "attachment": true,
+          "reasoning": true,
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          }
+        },
         "anthropic/claude-v4.1flash": {
           "name": "Claude V4.1 Flash",
           "attachment": true,
+          "reasoning": true,
           "modalities": {
             "input": ["text", "image"],
             "output": ["text"]
@@ -322,7 +349,7 @@ Configure `deeperseeker-rs` as a custom provider in `~/.config/opencode/opencode
 }
 ```
 
-Then run OpenCode in any project directory:
+Then run OpenCode in any project directory and switch models via <kbd>Ctrl+P</kbd>:
 
 ```bash
 opencode
@@ -332,10 +359,13 @@ opencode
 
 DeeperSeeker-RS serves DeepSeek Web through a unified model pipeline:
 
-| Model | What it is | For coding / agents |
+| Model | Capabilities | Recommended Use |
 | :--- | :--- | :--- |
-| **`v4.1flash`** | DeepSeek V4.1 Flash | 🟢 **Primary endpoint** |
-| `anthropic/claude-v4.1flash` | Claude Desktop auto-discovery alias | 🟢 **Claude `/v1/messages` client alias** |
+| **`v4.1flash`** | 🟢 Standard Fast | Coding, agent loops & fast chat (Default) |
+| **`v4.1flash-think`** | 🧠 Deep Think | Complex logic, algorithm design & math reasoning |
+| **`v4.1flash-search`** | 🌐 Web Search | Real-time news, fresh documentation & external lookups |
+| **`v4.1flash-think-search`** | 🧠 Deep Think + 🌐 Web Search | Comprehensive reasoning backed by live internet research |
+| **`anthropic/claude-v4.1flash`** | 🟢 Claude Drop-in | Claude CLI & Claude Desktop `/v1/messages` endpoint |
 
 ### Claude Desktop & Cursor Integration
 

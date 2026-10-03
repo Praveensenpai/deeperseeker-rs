@@ -3,6 +3,9 @@ use axum::{response::IntoResponse, Json};
 
 const KNOWN_MODELS: &[(&str, &str)] = &[
     ("v4.1flash", "deepseek"),
+    ("v4.1flash-think", "deepseek"),
+    ("v4.1flash-search", "deepseek"),
+    ("v4.1flash-think-search", "deepseek"),
     ("anthropic/claude-v4.1flash", "anthropic"),
 ];
 

@@ -104,7 +104,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn require_api_key (State (state) : State < AppState > , req : Request , next : Next) -> Response
   ```
 
-### `src/api/models.rs` (Role: api, Lines: 28)
+### `src/api/models.rs` (Role: api, Lines: 31)
 - **Responsibility**: Core api logic in src/api/models.rs
 - **Imports**: use crate :: domain :: openai :: { ModelList , ModelObject } , use axum :: { response :: IntoResponse , Json } 
 - **Public Functions & Signatures**:
