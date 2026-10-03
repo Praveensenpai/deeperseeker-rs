@@ -58,7 +58,10 @@ pub async fn handle_streaming_response(
         let ctx = StreamContext { chat_id: &chat_id, created, model: &model };
 
         'outer: while let Some(chunk_res) = byte_stream.next().await {
-            let Ok(bytes) = chunk_res else { continue; };
+            let Ok(bytes) = chunk_res else {
+                tracing::warn!("Upstream stream dropped mid-generation");
+                break 'outer;
+            };
             for line in drain_sse_lines(&mut buffer, &bytes) {
                 match parse_sse_line(&line, &mut think_open) {
                     SseLineResult::Done => break 'outer,
@@ -298,7 +301,8 @@ async fn read_unary_body(upstream_resp: reqwest::Response) -> (String, String) {
 
     while let Some(chunk_res) = byte_stream.next().await {
         let Ok(bytes) = chunk_res else {
-            continue;
+            tracing::warn!("Upstream stream dropped mid-generation (unary)");
+            break;
         };
         let lines = drain_sse_lines(&mut buffer, &bytes);
         if process_unary_lines(

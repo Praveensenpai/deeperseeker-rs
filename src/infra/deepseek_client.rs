@@ -3,6 +3,7 @@ use anyhow::{anyhow, Context, Result};
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE, USER_AGENT};
 use reqwest::Client;
 use serde_json::json;
+use std::time::Duration;
 
 const BASE_URL: &str = "https://chat.deepseek.com";
 const CLIENT_VERSION: &str = "2.4.5";
@@ -32,7 +33,10 @@ impl Default for DeepSeekClient {
 impl DeepSeekClient {
     pub fn new() -> Self {
         Self {
-            client: Client::builder().build().unwrap_or_default(),
+            client: Client::builder()
+                .tcp_keepalive(Duration::from_secs(30))
+                .build()
+                .unwrap_or_default(),
         }
     }
 
