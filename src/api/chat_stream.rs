@@ -57,11 +57,12 @@ pub async fn handle_streaming_response(
         let mut cur_tok = token_id;
         let ctx = StreamContext { chat_id: &chat_id, created, model: &req.model };
 
-        for attempt in 0..3 {
+        for attempt in 0..4 {
             let mut byte_stream = cur_resp.bytes_stream();
             let mut buffer = String::new();
             let mut think_open = false;
             let mut stream_state = StreamState::default();
+            let mut raw_lines = Vec::new();
 
             'outer: while let Some(chunk_res) = byte_stream.next().await {
                 let Ok(bytes) = chunk_res else {
@@ -69,6 +70,9 @@ pub async fn handle_streaming_response(
                     break 'outer;
                 };
                 for line in drain_sse_lines(&mut buffer, &bytes) {
+                    if raw_lines.len() < 5 {
+                        raw_lines.push(line.clone());
+                    }
                     match parse_sse_line(&line, &mut think_open) {
                         SseLineResult::Done => break 'outer,
                         SseLineResult::Error(code, msg) => {
@@ -100,11 +104,18 @@ pub async fn handle_streaming_response(
                 return;
             }
 
-            if attempt < 2 {
-                let wait_ms = if attempt == 0 { 1200 } else { 2000 };
-                tracing::warn!(
-                    "Stream produced 0 tokens (attempt {attempt}); auto-recovering with fresh session after {wait_ms}ms..."
-                );
+            tracing::warn!(
+                "Stream produced 0 tokens (attempt {attempt}). Raw lines: {:?}",
+                raw_lines
+            );
+
+            if attempt < 3 {
+                let wait_ms = match attempt {
+                    0 => 1500,
+                    1 => 2500,
+                    _ => 3500,
+                };
+                tracing::warn!("Retrying with fresh session after {wait_ms}ms...");
                 let _ = crate::infra::db::delete_sessions_for_chat(&db, cur_tok, &cur_sess).await;
                 tokio::time::sleep(std::time::Duration::from_millis(wait_ms)).await;
 
@@ -220,7 +231,12 @@ async fn finalize_stream_session(
     ids: (i64, String, i64, u32, usize),
 ) -> Option<String> {
     let (token_id, session_id, parent_id, prompt_tokens, full_len) = ids;
-    save_stream_session(db, req_messages, ctx.model, parsed, (token_id, session_id, parent_id)).await;
+    if parent_id < 40 {
+        save_stream_session(db, req_messages, ctx.model, parsed, (token_id, session_id, parent_id)).await;
+    } else {
+        tracing::info!("Rolling over session at parent {parent_id}");
+        let _ = crate::infra::db::delete_sessions_for_chat(db, token_id, &session_id).await;
+    }
     let comp_tokens = std::cmp::max(1, (full_len / 4) as u32);
     let _ = record_usage(db, ctx.model, prompt_tokens, comp_tokens, Some(token_id)).await;
     let finish_reason = if parsed.tool_calls.is_empty() { "stop" } else { "tool_calls" };

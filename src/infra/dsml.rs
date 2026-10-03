@@ -15,7 +15,7 @@ static INVOKE_BLOCK_RE: Lazy<Regex> = Lazy::new(|| {
 });
 
 static PARAM_TAG_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r#"(?is)<[/｜\|\s]*(?:DSML[/｜\|\s]*)?parameter\b([^>]*)>"#).expect("valid regex")
+    Regex::new(r#"(?is)<?[/｜\|\s]*(?:DSML[/｜\|\s]*)?parameter\b([^>]*)>"#).expect("valid regex")
 });
 
 static HERMES_FUNCTION_RE: Lazy<Regex> = Lazy::new(|| {
@@ -41,7 +41,7 @@ static STRIP_BLOCKS_RE: Lazy<Regex> = Lazy::new(|| {
 });
 
 static STRIP_TAGS_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?is)</?[｜\|\s]*(?:DSML[｜\|\s]*)?(?:tool_calls?|calls|function_calls?|invoke|parameter|tool_call|function_call|content|function|call)\b[^>]*>|FINISHED$")
+    Regex::new(r"(?is)<?/?[｜\|\s]*(?:DSML[｜\|\s]*)?(?:tool_calls?|calls|function_calls?|invoke|parameter|tool_call|function_call|content|function|call)\b[^>]*>|FINISHED$")
         .expect("valid regex")
 });
 
