@@ -15,7 +15,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
 
 ## 3. Module & Interface Skeleton
 
-### `src/api/anthropic.rs` (Role: api, Lines: 143)
+### `src/api/anthropic.rs` (Role: api, Lines: 145)
 - **Responsibility**: Core api logic in src/api/anthropic.rs
 - **Imports**: use crate :: api :: chat :: chat_completions , use crate :: api :: state :: AppState , use crate :: domain :: anthropic :: { AnthropicBlock , AnthropicContent , AnthropicMessage , AnthropicMessageRequest , AnthropicMessageResponse , AnthropicUsage , } , use crate :: domain :: openai :: { ChatCompletionRequest , ChatCompletionResponse , ChatMessage , ContentPart , MessageContent , } , use axum :: { extract :: State , http :: StatusCode , response :: { IntoResponse , Response } , Json , } , use serde_json :: json 
 - **Public Functions & Signatures**:
@@ -23,7 +23,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn anthropic_messages (State (state) : State < AppState > , Json (req) : Json < AnthropicMessageRequest > ,) -> Result < Response , (StatusCode , Json < serde_json :: Value >) >
   ```
 
-### `src/api/chat.rs` (Role: api, Lines: 245)
+### `src/api/chat.rs` (Role: api, Lines: 246)
 - **Responsibility**: Core api logic in src/api/chat.rs
 - **Imports**: use crate :: api :: chat_stream :: { handle_streaming_response , handle_unary_response } , use crate :: api :: state :: AppState , use crate :: domain :: openai :: ChatCompletionRequest , use crate :: domain :: session :: compute_signature , use crate :: domain :: token :: Token , use crate :: infra :: db :: { find_session , mark_active , mark_limited , pick_token , touch_token } , use crate :: infra :: deepseek_client :: CompletionArgs , use crate :: infra :: media :: { resolve_message_media , MediaContext } , use crate :: infra :: prompt :: build_prompt_for_turn , use axum :: { extract :: State , http :: StatusCode , response :: Response , Json } , use serde_json :: json 
 - **Public Functions & Signatures**:
@@ -230,7 +230,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   pub struct AnthropicUsage
   ```
 
-### `src/domain/openai.rs` (Role: domain, Lines: 295)
+### `src/domain/openai.rs` (Role: domain, Lines: 365)
 - **Responsibility**: Core domain logic in src/domain/openai.rs
 - **Imports**: use serde :: { Deserialize , Serialize } 
 - **Types & Enums**:
@@ -264,6 +264,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn system (content : impl Into < String >) -> Self
   fn text_content (& self) -> String
   fn is_reasoning_requested (& self) -> bool
+  fn is_search_requested (& self) -> bool
   ```
 
 ### `src/domain/session.rs` (Role: domain, Lines: 92)

@@ -29,6 +29,8 @@ pub async fn anthropic_messages(
         tools: None,
         reasoning_effort: None,
         thinking: req.thinking,
+        search: None,
+        web_search: None,
     };
 
     let resp = chat_completions(State(state), Json(openai_req)).await?;

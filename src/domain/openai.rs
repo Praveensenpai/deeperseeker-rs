@@ -143,12 +143,16 @@ pub struct ChatCompletionRequest {
     pub reasoning_effort: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub search: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub web_search: Option<bool>,
 }
 
 impl ChatCompletionRequest {
     pub fn is_reasoning_requested(&self) -> bool {
         let model_lower = self.model.to_lowercase();
-        if model_lower.contains("reasoner") || model_lower.contains("r1") {
+        if model_lower.contains("reasoner") || model_lower.contains("r1") || model_lower.contains("think") {
             return true;
         }
         if let Some(effort) = &self.reasoning_effort {
@@ -156,7 +160,35 @@ impl ChatCompletionRequest {
                 return true;
             }
         }
-        self.thinking.is_some()
+        if let Some(t) = &self.thinking {
+            if let Some(type_str) = t.get("type").and_then(|v| v.as_str()) {
+                if type_str == "disabled" {
+                    return false;
+                }
+            }
+            return true;
+        }
+        false
+    }
+
+    pub fn is_search_requested(&self) -> bool {
+        let model_lower = self.model.to_lowercase();
+        if model_lower.contains("search") || model_lower.contains("online") {
+            return true;
+        }
+        if self.search == Some(true) || self.web_search == Some(true) {
+            return true;
+        }
+        if let Some(tools) = &self.tools {
+            return tools.iter().any(|t| {
+                t.get("type").and_then(|v| v.as_str()) == Some("web_search")
+                    || t.get("function")
+                        .and_then(|f| f.get("name"))
+                        .and_then(|n| n.as_str())
+                        == Some("web_search")
+            });
+        }
+        false
     }
 }
 
@@ -257,6 +289,8 @@ mod tests {
             tools: None,
             reasoning_effort: None,
             thinking: None,
+            search: None,
+            web_search: None,
         };
         assert!(!chat_req.is_reasoning_requested());
 
@@ -269,6 +303,8 @@ mod tests {
             tools: None,
             reasoning_effort: None,
             thinking: None,
+            search: None,
+            web_search: None,
         };
         assert!(reasoner_req.is_reasoning_requested());
 
@@ -281,6 +317,8 @@ mod tests {
             tools: None,
             reasoning_effort: None,
             thinking: None,
+            search: None,
+            web_search: None,
         };
         assert!(r1_req.is_reasoning_requested());
 
@@ -291,5 +329,37 @@ mod tests {
         let mut thinking_req = chat_req.clone();
         thinking_req.thinking = Some(serde_json::json!({"type": "enabled"}));
         assert!(thinking_req.is_reasoning_requested());
+
+        let mut disabled_thinking = chat_req.clone();
+        disabled_thinking.thinking = Some(serde_json::json!({"type": "disabled"}));
+        assert!(!disabled_thinking.is_reasoning_requested());
+    }
+
+    #[test]
+    fn test_is_search_requested() {
+        let mut req = ChatCompletionRequest {
+            model: "v4.1flash".to_string(),
+            messages: vec![],
+            stream: false,
+            temperature: None,
+            max_tokens: None,
+            tools: None,
+            reasoning_effort: None,
+            thinking: None,
+            search: None,
+            web_search: None,
+        };
+        assert!(!req.is_search_requested());
+
+        req.search = Some(true);
+        assert!(req.is_search_requested());
+
+        req.search = None;
+        req.web_search = Some(true);
+        assert!(req.is_search_requested());
+
+        req.web_search = None;
+        req.model = "v4.1flash-search".to_string();
+        assert!(req.is_search_requested());
     }
 }

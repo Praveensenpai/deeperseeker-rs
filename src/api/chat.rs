@@ -231,6 +231,7 @@ async fn prepare_completion_args(
     };
 
     let thinking_enabled = req.is_reasoning_requested();
+    let search_enabled = req.is_search_requested();
 
     Ok(CompletionArgs {
         token: prep.token.token.clone(),
@@ -240,6 +241,6 @@ async fn prepare_completion_args(
         pow_response: pow_resp,
         ref_file_ids,
         thinking_enabled,
-        search_enabled: false,
+        search_enabled,
     })
 }
