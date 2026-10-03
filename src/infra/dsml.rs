@@ -44,7 +44,10 @@ pub fn find_dsml_block_start(text: &str) -> Option<usize> {
 }
 
 pub fn safe_unambiguous_len(text: &str) -> usize {
-    let search_start = text.len().saturating_sub(32);
+    let mut search_start = text.len().saturating_sub(32);
+    while search_start > 0 && !text.is_char_boundary(search_start) {
+        search_start -= 1;
+    }
     if let Some(rel_pos) = text[search_start..].rfind('<') {
         let tag_start = search_start + rel_pos;
         let suffix = &text[tag_start + 1..];
@@ -206,6 +209,14 @@ mod tests {
         assert_eq!(safe_unambiguous_len("hello <｜"), 6);
         assert_eq!(safe_unambiguous_len("hello <｜｜DSML"), 6);
         assert_eq!(safe_unambiguous_len("5 < 10"), 6);
+    }
+
+    #[test]
+    fn test_safe_unambiguous_len_multibyte_utf8() {
+        // em-dashes, en-dashes, and emojis near boundary
+        let sample = "anime4k-cli – Rust tool that manages Anime4K GLSL shaders for mpv.\ndubstrip — Lossless audio-stream stri 🦀";
+        let len = safe_unambiguous_len(sample);
+        assert_eq!(len, sample.len());
     }
 
     #[test]

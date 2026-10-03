@@ -371,7 +371,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn download_file (& self , token : & str , file_id : & str) -> Result < Vec < u8 > >
   ```
 
-### `src/infra/dsml.rs` (Role: infra, Lines: 217)
+### `src/infra/dsml.rs` (Role: infra, Lines: 228)
 - **Responsibility**: Core infra logic in src/infra/dsml.rs
 - **Imports**: use crate :: domain :: openai :: { FunctionCall , ToolCall } , use once_cell :: sync :: Lazy , use regex :: Regex , use serde_json :: Value , use uuid :: Uuid 
 - **Types & Enums**:
