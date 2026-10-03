@@ -12,7 +12,7 @@
 *Ultra-low latency, memory-efficient reverse proxy bridging DeepSeek's Web API to OpenAI and Claude compatible endpoints.*  
 *Rust rewrite of [DeeperSeeker](https://github.com/AmanCode22/deeperseeker) by [AmanCode22](https://github.com/AmanCode22).*
 
-[⚡ Quick Start](#-quick-start) • [✨ Key Features](#-key-features) • [🎥 Showcase](#-usage-showcase) • [🔑 DeepSeek Token Setup](#-deepseek-token-setup) • [💻 CLI Ergonomics](#-cli-ergonomics) • [📊 Token Usage Analytics](#-token-usage-analytics) • [🏛️ Architecture](#%EF%B8%8F-architecture) • [🔌 API & Demos](#-api-usage) • [🙏 Credits](#-acknowledgements--credits)
+[⚡ Quick Start](#-quick-start) • [✨ Key Features](#-key-features) • [⚡ Why Rust?](#-why-deeperseeker-rs-rust-vs-python) • [🎥 Showcase](#-usage-showcase) • [🔑 DeepSeek Token Setup](#-deepseek-token-setup) • [💻 CLI Ergonomics](#-cli-ergonomics) • [📊 Token Usage Analytics](#-token-usage-analytics) • [🏛️ Architecture](#%EF%B8%8F-architecture) • [🔌 API & Demos](#-api-usage) • [🙏 Credits](#-acknowledgements--credits)
 
 </div>
 
@@ -107,6 +107,21 @@ Or paste it into the Web Dashboard at `http://localhost:4000/dashboard`.
 - 📊 **Usage Analytics Engine**: Token tracking across Today, Yesterday, This Week, Month, Year, and All-Time with K/M/B formatting.
 - 🖥️ **Interactive TUI & CLI**: Multi-view Ratatui terminal dashboard, end-to-end diagnostics, and systemd service management.
 - 🎨 **Minimal Web Dashboard**: Modern dark-mode interface built with clean typography, live stats, and one-click token copy.
+
+---
+
+## ⚡ Why DeeperSeeker-RS? (Rust vs. Python)
+
+| Feature / Dimension | 🐍 Original Python (`deeperseeker`) | ⚡ Rust (`deeperseeker-rs`) |
+| :--- | :--- | :--- |
+| **Runtime & Dependencies** | Python 3.10+, `pip`, `venv`, `playwright`, `aiohttp` | **Zero dependencies** (single standalone 10 MB binary) |
+| **Memory Footprint** | ~90 MB – 250 MB+ (up to 500 MB with Playwright) | **~15 MB peak RAM** (negligible memory footprint) |
+| **Concurrency & Engine** | Single-threaded `asyncio` bound by Python GIL | Multi-threaded **Tokio worker pool + Axum 0.8** |
+| **WASM PoW Solving** | Python FFI to `wasmtime-py` (blocks event loop) | Native `wasmtime` engine run on dedicated worker threads |
+| **Agentic Tool Calling** | Basic streaming; DSML XML tags can leak into chat | Dedicated **DSML interceptor** converting to OpenAI `tool_calls` |
+| **Stream Resiliency** | Prone to UTF-8 mid-byte slicing panics | **UTF-8 char-boundary alignment** + graceful connection recovery |
+| **Terminal Tooling** | Plain console stdout logs only | **Interactive Ratatui TUI** (`status`) + CLI usage tables (`usage`) |
+| **Service Integration** | Manual systemd unit or Docker container | Built-in systemd user service installer (`deeperseeker service install`) |
 
 ---
 
