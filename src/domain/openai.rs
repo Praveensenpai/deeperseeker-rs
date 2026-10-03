@@ -113,10 +113,29 @@ pub struct ChatCompletionRequest {
     pub max_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<serde_json::Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<serde_json::Value>,
+}
+
+impl ChatCompletionRequest {
+    pub fn is_reasoning_requested(&self) -> bool {
+        let model_lower = self.model.to_lowercase();
+        if model_lower.contains("reasoner") || model_lower.contains("r1") {
+            return true;
+        }
+        if let Some(effort) = &self.reasoning_effort {
+            if !effort.is_empty() && effort != "none" {
+                return true;
+            }
+        }
+        self.thinking.is_some()
+    }
 }
 
 fn default_model() -> String {
-    "v4.1flash".to_string()
+    "deepseek-chat".to_string()
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -195,4 +214,56 @@ pub struct ModelObject {
 pub struct ModelList {
     pub object: String,
     pub data: Vec<ModelObject>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_reasoning_requested() {
+        let chat_req = ChatCompletionRequest {
+            model: "deepseek-chat".to_string(),
+            messages: vec![],
+            stream: false,
+            temperature: None,
+            max_tokens: None,
+            tools: None,
+            reasoning_effort: None,
+            thinking: None,
+        };
+        assert!(!chat_req.is_reasoning_requested());
+
+        let reasoner_req = ChatCompletionRequest {
+            model: "deepseek-reasoner".to_string(),
+            messages: vec![],
+            stream: false,
+            temperature: None,
+            max_tokens: None,
+            tools: None,
+            reasoning_effort: None,
+            thinking: None,
+        };
+        assert!(reasoner_req.is_reasoning_requested());
+
+        let r1_req = ChatCompletionRequest {
+            model: "deepseek-r1".to_string(),
+            messages: vec![],
+            stream: false,
+            temperature: None,
+            max_tokens: None,
+            tools: None,
+            reasoning_effort: None,
+            thinking: None,
+        };
+        assert!(r1_req.is_reasoning_requested());
+
+        let mut effort_req = chat_req.clone();
+        effort_req.reasoning_effort = Some("medium".to_string());
+        assert!(effort_req.is_reasoning_requested());
+
+        let mut thinking_req = chat_req.clone();
+        thinking_req.thinking = Some(serde_json::json!({"type": "enabled"}));
+        assert!(thinking_req.is_reasoning_requested());
+    }
 }

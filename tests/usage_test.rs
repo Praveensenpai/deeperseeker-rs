@@ -60,6 +60,48 @@ async fn test_db_usage_recording_and_summaries() {
     assert_eq!(models[1].total_tokens, 1300);
 }
 
+#[tokio::test]
+async fn test_filtered_usage_queries() {
+    let conn = open_db(":memory:").await.unwrap();
+    init_db(&conn).await.unwrap();
+
+    record_usage(&conn, "deepseek-chat", 100, 200, Some(1))
+        .await
+        .unwrap();
+    record_usage(&conn, "deepseek-chat", 400, 600, Some(1))
+        .await
+        .unwrap();
+    record_usage(&conn, "deepseek-reasoner", 1000, 2000, Some(2))
+        .await
+        .unwrap();
+
+    let chat_filter = deeperseeker::domain::usage::UsageFilter {
+        model: Some("deepseek-chat".to_string()),
+        token_id: None,
+    };
+    let chat_summaries = deeperseeker::infra::usage_db::get_filtered_summaries(&conn, &chat_filter)
+        .await
+        .unwrap();
+    let chat_today = chat_summaries.iter().find(|s| s.period == "Today").unwrap();
+    assert_eq!(chat_today.requests, 2);
+    assert_eq!(chat_today.total_tokens, 1300);
+
+    let token2_filter = deeperseeker::domain::usage::UsageFilter {
+        model: None,
+        token_id: Some(2),
+    };
+    let token2_summaries =
+        deeperseeker::infra::usage_db::get_filtered_summaries(&conn, &token2_filter)
+            .await
+            .unwrap();
+    let token2_today = token2_summaries
+        .iter()
+        .find(|s| s.period == "Today")
+        .unwrap();
+    assert_eq!(token2_today.requests, 1);
+    assert_eq!(token2_today.total_tokens, 3000);
+}
+
 #[test]
 fn test_dashboard_template_metrics_rendering() {
     let mut tera = tera::Tera::default();

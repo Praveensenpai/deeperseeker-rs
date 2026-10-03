@@ -1,4 +1,4 @@
-use crate::domain::usage::{DailyUsage, ModelUsage, UsageSummary};
+use crate::domain::usage::{DailyUsage, ModelUsage, UsageFilter, UsageSummary};
 use anyhow::{Context, Result};
 use rusqlite::params;
 use tokio_rusqlite::Connection;
@@ -58,7 +58,26 @@ pub async fn record_usage(
     .context("Failed recording token usage")
 }
 
+fn build_where_clause(base: &str, filter: &UsageFilter) -> String {
+    let mut parts = vec![base.to_string()];
+    if let Some(m) = &filter.model {
+        let escaped = m.replace('\'', "''");
+        parts.push(format!("model = '{escaped}'"));
+    }
+    if let Some(tid) = filter.token_id {
+        parts.push(format!("token_id = {tid}"));
+    }
+    parts.join(" AND ")
+}
+
 pub async fn get_all_summaries(conn: &Connection) -> Result<Vec<UsageSummary>> {
+    get_filtered_summaries(conn, &UsageFilter::default()).await
+}
+
+pub async fn get_filtered_summaries(
+    conn: &Connection,
+    filter: &UsageFilter,
+) -> Result<Vec<UsageSummary>> {
     let periods = [
         ("Today", "date = date('now')"),
         ("Yesterday", "date = date('now', '-1 day')"),
@@ -73,7 +92,8 @@ pub async fn get_all_summaries(conn: &Connection) -> Result<Vec<UsageSummary>> {
 
     let mut summaries = Vec::new();
     for (name, condition) in periods {
-        let summary = fetch_period_summary(conn, name, condition).await?;
+        let where_clause = build_where_clause(condition, filter);
+        let summary = fetch_period_summary(conn, name, where_clause).await?;
         summaries.push(summary);
     }
     Ok(summaries)
@@ -82,7 +102,7 @@ pub async fn get_all_summaries(conn: &Connection) -> Result<Vec<UsageSummary>> {
 async fn fetch_period_summary(
     conn: &Connection,
     period: &str,
-    condition: &'static str,
+    condition: String,
 ) -> Result<UsageSummary> {
     let p_name = period.to_string();
     conn.call(move |c| {
@@ -112,14 +132,26 @@ async fn fetch_period_summary(
 }
 
 pub async fn get_daily_breakdown(conn: &Connection, limit: usize) -> Result<Vec<DailyUsage>> {
+    get_filtered_daily_breakdown(conn, limit, &UsageFilter::default()).await
+}
+
+pub async fn get_filtered_daily_breakdown(
+    conn: &Connection,
+    limit: usize,
+    filter: &UsageFilter,
+) -> Result<Vec<DailyUsage>> {
+    let where_clause = build_where_clause("1=1", filter);
     conn.call(move |c| {
-        let mut stmt = c.prepare(
+        let query = format!(
             "SELECT date, COUNT(*), SUM(prompt_tokens), SUM(completion_tokens), SUM(total_tokens)
              FROM request_usage
+             WHERE {}
              GROUP BY date
              ORDER BY date DESC
              LIMIT ?1",
-        )?;
+            where_clause
+        );
+        let mut stmt = c.prepare(&query)?;
         let rows = stmt.query_map(params![limit as i64], |r| {
             let d: String = r.get(0)?;
             let reqs: i64 = r.get(1)?;
@@ -145,13 +177,24 @@ pub async fn get_daily_breakdown(conn: &Connection, limit: usize) -> Result<Vec<
 }
 
 pub async fn get_model_breakdown(conn: &Connection) -> Result<Vec<ModelUsage>> {
-    conn.call(|c| {
-        let mut stmt = c.prepare(
+    get_filtered_model_breakdown(conn, &UsageFilter::default()).await
+}
+
+pub async fn get_filtered_model_breakdown(
+    conn: &Connection,
+    filter: &UsageFilter,
+) -> Result<Vec<ModelUsage>> {
+    let where_clause = build_where_clause("1=1", filter);
+    conn.call(move |c| {
+        let query = format!(
             "SELECT model, COUNT(*), SUM(total_tokens)
              FROM request_usage
+             WHERE {}
              GROUP BY model
              ORDER BY SUM(total_tokens) DESC",
-        )?;
+            where_clause
+        );
+        let mut stmt = c.prepare(&query)?;
         let rows = stmt.query_map([], |r| {
             let m: String = r.get(0)?;
             let reqs: i64 = r.get(1)?;

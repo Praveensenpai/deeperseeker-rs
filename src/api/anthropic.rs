@@ -25,6 +25,8 @@ pub async fn anthropic_messages(
         temperature: req.temperature,
         max_tokens: Some(req.max_tokens),
         tools: None,
+        reasoning_effort: None,
+        thinking: req.thinking,
     };
 
     let resp = chat_completions(State(state), Json(openai_req)).await?;

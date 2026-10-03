@@ -22,10 +22,16 @@ if [[ "${OS}" != "linux" ]]; then
     exit 1
 fi
 
-if [[ "${ARCH}" != "x86_64" ]]; then
-    echo -e "\033[1;31m✖ Error: Pre-built binaries are compiled for x86_64. Found ${ARCH}.\033[0m" >&2
+if [[ "${ARCH}" != "x86_64" && "${ARCH}" != "aarch64" && "${ARCH}" != "arm64" ]]; then
+    echo -e "\033[1;31m✖ Error: Pre-built binaries are compiled for x86_64 and aarch64. Found ${ARCH}.\033[0m" >&2
     echo -e "  Please build from source: cargo install --git https://github.com/${REPO}.git" >&2
     exit 1
+fi
+
+if [[ "${ARCH}" == "aarch64" || "${ARCH}" == "arm64" ]]; then
+    ARCH_SUFFIX="aarch64"
+else
+    ARCH_SUFFIX="x86_64"
 fi
 
 mkdir -p "${INSTALL_BIN_DIR}"
@@ -48,7 +54,7 @@ else
     TMP_DIR="$(mktemp -d)"
     trap 'rm -rf "${TMP_DIR}"' EXIT
 
-    ASSET="deeperseeker-x86_64-linux.tar.gz"
+    ASSET="deeperseeker-${ARCH_SUFFIX}-linux.tar.gz"
 
     # Resolve latest release version tag
     TARGET_VERSION=""

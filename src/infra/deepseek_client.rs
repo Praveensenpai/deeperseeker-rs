@@ -19,6 +19,8 @@ pub struct CompletionArgs {
     pub prompt: String,
     pub pow_response: String,
     pub ref_file_ids: Vec<String>,
+    pub thinking_enabled: bool,
+    pub search_enabled: bool,
 }
 
 impl Default for DeepSeekClient {
@@ -143,8 +145,8 @@ impl DeepSeekClient {
             "model_type": "deepseek_chat",
             "prompt": args.prompt,
             "ref_file_ids": args.ref_file_ids,
-            "thinking_enabled": false,
-            "search_enabled": false,
+            "thinking_enabled": args.thinking_enabled,
+            "search_enabled": args.search_enabled,
             "preempt": false,
             "action": null
         });

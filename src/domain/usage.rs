@@ -37,6 +37,12 @@ pub struct ModelUsage {
     pub total_tokens: u64,
 }
 
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct UsageFilter {
+    pub model: Option<String>,
+    pub token_id: Option<i64>,
+}
+
 pub fn format_metric(val: u64, raw: bool) -> String {
     if raw {
         return val.to_string();

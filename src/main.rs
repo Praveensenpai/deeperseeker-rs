@@ -34,7 +34,15 @@ async fn main() -> Result<()> {
         }
         Some(Commands::Usage(args)) => {
             let db_path = deeperseeker::infra::assets::resolve_db_path(args.db.as_deref());
-            display_usage(&db_path, args.raw, args.days, args.json).await
+            display_usage(deeperseeker::cli::usage_cmd::UsageViewArgs {
+                db_path,
+                raw: args.raw,
+                days: args.days,
+                as_json: args.json,
+                model: args.model,
+                token: args.token,
+            })
+            .await
         }
         Some(Commands::Token(args)) => handle_token(args).await,
         Some(Commands::Test(args)) => {
@@ -75,27 +83,36 @@ fn handle_service(args: ServiceArgs) -> Result<()> {
     }
 }
 
+fn apply_serve_args(config: &mut AppConfig, args: &ServeArgs) {
+    if let Some(h) = &args.host {
+        config.host = h.clone();
+    }
+    if let Some(p) = args.port {
+        config.port = p;
+    }
+    if let Some(d) = &args.db {
+        config.db_path = d.clone();
+    }
+    if let Some(w) = &args.wasm {
+        config.wasm_path = deeperseeker::infra::assets::resolve_wasm_path(w);
+    }
+}
+
 async fn run_server(args: ServeArgs) -> Result<()> {
     tracing_subscriber::fmt::init();
     dotenvy::dotenv().ok();
 
     let mut config = AppConfig::from_env();
-    if let Some(h) = args.host {
-        config.host = h;
-    }
-    if let Some(p) = args.port {
-        config.port = p;
-    }
-    if let Some(d) = args.db {
-        config.db_path = d;
-    }
-    if let Some(w) = args.wasm {
-        config.wasm_path = deeperseeker::infra::assets::resolve_wasm_path(&w);
-    }
+    apply_serve_args(&mut config, &args);
 
     let config = Arc::new(config);
     let db = open_db(&config.db_path).await?;
     init_db(&db).await?;
+
+    let _watchdog = deeperseeker::infra::watchdog::start_token_watchdog(
+        db.clone(),
+        std::time::Duration::from_secs(30),
+    );
 
     let pow_solver = Arc::new(
         PowSolver::new(&config.wasm_path).context("Failed initializing WASM PoW solver engine")?,

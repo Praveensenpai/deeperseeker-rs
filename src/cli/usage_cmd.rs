@@ -1,26 +1,68 @@
-use crate::domain::usage::format_metric;
-use crate::infra::db::{init_db, open_db};
-use crate::infra::usage_db::{get_all_summaries, get_daily_breakdown, get_model_breakdown};
+use crate::domain::usage::{format_metric, UsageFilter};
+use crate::infra::db::{get_tokens, init_db, open_db};
+use crate::infra::usage_db::{
+    get_filtered_daily_breakdown, get_filtered_model_breakdown, get_filtered_summaries,
+};
 use anyhow::{Context, Result};
 use serde_json::json;
 
-pub async fn display_usage(db_path: &str, raw: bool, days: usize, as_json: bool) -> Result<()> {
-    let conn = open_db(db_path).await.context("Failed opening database")?;
+pub struct UsageViewArgs {
+    pub db_path: String,
+    pub raw: bool,
+    pub days: usize,
+    pub as_json: bool,
+    pub model: Option<String>,
+    pub token: Option<String>,
+}
+
+async fn resolve_filter_token(
+    conn: &tokio_rusqlite::Connection,
+    tok_str: &str,
+) -> Result<Option<i64>> {
+    let tokens = get_tokens(conn).await?;
+    if let Some(t) = tokens
+        .iter()
+        .find(|t| t.alias.as_deref() == Some(tok_str) || t.id.to_string() == *tok_str)
+    {
+        return Ok(Some(t.id));
+    }
+    if let Ok(parsed) = tok_str.parse::<i64>() {
+        return Ok(Some(parsed));
+    }
+    Ok(None)
+}
+
+pub async fn display_usage(args: UsageViewArgs) -> Result<()> {
+    let conn = open_db(&args.db_path)
+        .await
+        .context("Failed opening database")?;
     init_db(&conn)
         .await
         .context("Failed initializing database")?;
-    let summaries = get_all_summaries(&conn)
-        .await
-        .context("Failed retrieving usage summaries")?;
-    let daily = get_daily_breakdown(&conn, days)
-        .await
-        .context("Failed retrieving daily usage")?;
-    let models = get_model_breakdown(&conn)
-        .await
-        .context("Failed retrieving model usage")?;
 
-    if as_json {
+    let mut token_id = None;
+    if let Some(tok_str) = &args.token {
+        match resolve_filter_token(&conn, tok_str).await? {
+            Some(id) => token_id = Some(id),
+            None => {
+                println!("No token matching '{tok_str}' found in database.");
+                return Ok(());
+            }
+        }
+    }
+
+    let filter = UsageFilter {
+        model: args.model.clone(),
+        token_id,
+    };
+
+    let summaries = get_filtered_summaries(&conn, &filter).await?;
+    let daily = get_filtered_daily_breakdown(&conn, args.days, &filter).await?;
+    let models = get_filtered_model_breakdown(&conn, &filter).await?;
+
+    if args.as_json {
         let out = json!({
+            "filter": { "model": args.model, "token_id": token_id },
             "summaries": summaries,
             "daily": daily,
             "models": models,
@@ -29,9 +71,15 @@ pub async fn display_usage(db_path: &str, raw: bool, days: usize, as_json: bool)
         return Ok(());
     }
 
-    render_summary_table(&summaries, raw);
-    render_daily_histogram(&daily, raw);
-    render_model_distribution(&models, raw);
+    if args.model.is_some() || args.token.is_some() {
+        let m_disp = args.model.as_deref().unwrap_or("All");
+        let t_disp = args.token.as_deref().unwrap_or("All");
+        println!("Filters applied -> Model: {m_disp} | Token: {t_disp}\n");
+    }
+
+    render_summary_table(&summaries, args.raw);
+    render_daily_histogram(&daily, args.raw);
+    render_model_distribution(&models, args.raw);
 
     Ok(())
 }

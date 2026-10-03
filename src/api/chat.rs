@@ -231,6 +231,8 @@ async fn prepare_completion_args(
         Some(prep.parent_id)
     };
 
+    let thinking_enabled = req.is_reasoning_requested();
+
     Ok(CompletionArgs {
         token: prep.token.token.clone(),
         session_id: prep.session_id.clone(),
@@ -238,6 +240,8 @@ async fn prepare_completion_args(
         prompt,
         pow_response: pow_resp,
         ref_file_ids,
+        thinking_enabled,
+        search_enabled: false,
     })
 }
 

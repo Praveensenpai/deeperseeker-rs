@@ -146,4 +146,10 @@ pub struct UsageArgs {
     /// Output raw JSON payload instead of styled table
     #[arg(long)]
     pub json: bool,
+    /// Filter analytics by model name
+    #[arg(short = 'm', long)]
+    pub model: Option<String>,
+    /// Filter analytics by token alias or numeric ID
+    #[arg(short = 't', long)]
+    pub token: Option<String>,
 }

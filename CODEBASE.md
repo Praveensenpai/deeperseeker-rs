@@ -15,7 +15,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
 
 ## 3. Module & Interface Skeleton
 
-### `src/api/anthropic.rs` (Role: api, Lines: 112)
+### `src/api/anthropic.rs` (Role: api, Lines: 114)
 - **Responsibility**: Core api logic in src/api/anthropic.rs
 - **Imports**: use crate :: api :: chat :: chat_completions , use crate :: api :: state :: AppState , use crate :: domain :: anthropic :: { AnthropicBlock , AnthropicContent , AnthropicMessage , AnthropicMessageRequest , AnthropicMessageResponse , AnthropicUsage , } , use crate :: domain :: openai :: { ChatCompletionRequest , ChatCompletionResponse , ChatMessage } , use axum :: { extract :: State , http :: StatusCode , response :: { IntoResponse , Response } , Json , } , use serde_json :: json 
 - **Public Functions & Signatures**:
@@ -23,7 +23,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn anthropic_messages (State (state) : State < AppState > , Json (req) : Json < AnthropicMessageRequest > ,) -> Result < Response , (StatusCode , Json < serde_json :: Value >) >
   ```
 
-### `src/api/chat.rs` (Role: api, Lines: 261)
+### `src/api/chat.rs` (Role: api, Lines: 265)
 - **Responsibility**: Core api logic in src/api/chat.rs
 - **Imports**: use crate :: api :: chat_stream :: { handle_streaming_response , handle_unary_response } , use crate :: api :: state :: AppState , use crate :: domain :: openai :: ChatCompletionRequest , use crate :: domain :: session :: compute_signature , use crate :: domain :: token :: Token , use crate :: infra :: db :: { find_session , mark_active , mark_limited , pick_token , touch_token } , use crate :: infra :: deepseek_client :: CompletionArgs , use crate :: infra :: prompt :: build_prompt_for_turn , use crate :: infra :: rehome :: rehome_foreign_files , use axum :: { extract :: State , http :: StatusCode , response :: Response , Json } , use serde_json :: json 
 - **Public Functions & Signatures**:
@@ -104,7 +104,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn require_api_key (State (state) : State < AppState > , req : Request , next : Next) -> Response
   ```
 
-### `src/api/models.rs` (Role: api, Lines: 24)
+### `src/api/models.rs` (Role: api, Lines: 35)
 - **Responsibility**: Core api logic in src/api/models.rs
 - **Imports**: use crate :: domain :: openai :: { ModelList , ModelObject } , use axum :: { response :: IntoResponse , Json } 
 - **Public Functions & Signatures**:
@@ -126,12 +126,16 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn get_in_flight_snapshot (& self) -> HashMap < i64 , usize >
   ```
 
-### `src/api/usage.rs` (Role: api, Lines: 17)
+### `src/api/usage.rs` (Role: api, Lines: 48)
 - **Responsibility**: Core api logic in src/api/usage.rs
-- **Imports**: use crate :: api :: state :: AppState , use crate :: infra :: usage_db :: { get_all_summaries , get_daily_breakdown , get_model_breakdown } , use axum :: { extract :: State , response :: IntoResponse , Json } , use serde_json :: json 
+- **Imports**: use crate :: api :: state :: AppState , use crate :: domain :: usage :: UsageFilter , use crate :: infra :: usage_db :: { get_filtered_daily_breakdown , get_filtered_model_breakdown , get_filtered_summaries , } , use axum :: { extract :: { Query , State } , response :: IntoResponse , Json , } , use serde :: Deserialize , use serde_json :: json 
+- **Types & Enums**:
+  ```rust
+  pub struct UsageQuery
+  ```
 - **Public Functions & Signatures**:
   ```rust
-  async fn get_usage_metrics (State (state) : State < AppState >) -> impl IntoResponse
+  async fn get_usage_metrics (State (state) : State < AppState > , Query (query) : Query < UsageQuery > ,) -> impl IntoResponse
   ```
 
 ### `src/api.rs` (Role: api, Lines: 62)
@@ -171,15 +175,19 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn test_tokens (target_id : Option < i64 > , db_path : & str) -> Result < () >
   ```
 
-### `src/cli/usage_cmd.rs` (Role: cli, Lines: 131)
+### `src/cli/usage_cmd.rs` (Role: cli, Lines: 179)
 - **Responsibility**: Core cli logic in src/cli/usage_cmd.rs
-- **Imports**: use crate :: domain :: usage :: format_metric , use crate :: infra :: db :: { init_db , open_db } , use crate :: infra :: usage_db :: { get_all_summaries , get_daily_breakdown , get_model_breakdown } , use anyhow :: { Context , Result } , use serde_json :: json 
+- **Imports**: use crate :: domain :: usage :: { format_metric , UsageFilter } , use crate :: infra :: db :: { get_tokens , init_db , open_db } , use crate :: infra :: usage_db :: { get_filtered_daily_breakdown , get_filtered_model_breakdown , get_filtered_summaries , } , use anyhow :: { Context , Result } , use serde_json :: json 
+- **Types & Enums**:
+  ```rust
+  pub struct UsageViewArgs
+  ```
 - **Public Functions & Signatures**:
   ```rust
-  async fn display_usage (db_path : & str , raw : bool , days : usize , as_json : bool) -> Result < () >
+  async fn display_usage (args : UsageViewArgs) -> Result < () >
   ```
 
-### `src/cli.rs` (Role: cli, Lines: 149)
+### `src/cli.rs` (Role: cli, Lines: 155)
 - **Responsibility**: Core cli logic in src/cli.rs
 - **Imports**: use clap :: { Args , Parser , Subcommand } 
 - **Types & Enums**:
@@ -208,7 +216,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn from_env () -> Self
   ```
 
-### `src/domain/anthropic.rs` (Role: domain, Lines: 52)
+### `src/domain/anthropic.rs` (Role: domain, Lines: 54)
 - **Responsibility**: Core domain logic in src/domain/anthropic.rs
 - **Imports**: use serde :: { Deserialize , Serialize } 
 - **Types & Enums**:
@@ -221,7 +229,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   pub struct AnthropicUsage
   ```
 
-### `src/domain/openai.rs` (Role: domain, Lines: 198)
+### `src/domain/openai.rs` (Role: domain, Lines: 269)
 - **Responsibility**: Core domain logic in src/domain/openai.rs
 - **Imports**: use serde :: { Deserialize , Serialize } 
 - **Types & Enums**:
@@ -252,6 +260,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn assistant (content : impl Into < String >) -> Self
   fn system (content : impl Into < String >) -> Self
   fn text_content (& self) -> String
+  fn is_reasoning_requested (& self) -> bool
   ```
 
 ### `src/domain/session.rs` (Role: domain, Lines: 92)
@@ -301,7 +310,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   pub struct FileRecord
   ```
 
-### `src/domain/usage.rs` (Role: domain, Lines: 57)
+### `src/domain/usage.rs` (Role: domain, Lines: 63)
 - **Responsibility**: Core domain logic in src/domain/usage.rs
 - **Imports**: use serde :: { Deserialize , Serialize } 
 - **Types & Enums**:
@@ -310,6 +319,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   pub struct UsageSummary
   pub struct DailyUsage
   pub struct ModelUsage
+  pub struct UsageFilter
   ```
 - **Public Functions & Signatures**:
   ```rust
@@ -353,7 +363,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn get_file_token (conn : & Connection , file_id : & str) -> Result < Option < i64 > >
   ```
 
-### `src/infra/deepseek_client.rs` (Role: infra, Lines: 234)
+### `src/infra/deepseek_client.rs` (Role: infra, Lines: 236)
 - **Responsibility**: Core infra logic in src/infra/deepseek_client.rs
 - **Imports**: use crate :: domain :: upstream :: { CreateChatResponse , PowChallenge , PowChallengeWrapper } , use anyhow :: { anyhow , Context , Result } , use reqwest :: header :: { HeaderMap , HeaderValue , AUTHORIZATION , CONTENT_TYPE , USER_AGENT } , use reqwest :: Client , use serde_json :: json 
 - **Types & Enums**:
@@ -429,25 +439,37 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn extract_chunks_from_event (val : & serde_json :: Value , think_open : & mut bool ,) -> Vec < ExtractedChunk >
   ```
 
-### `src/infra/usage_db.rs` (Role: infra, Lines: 173)
+### `src/infra/usage_db.rs` (Role: infra, Lines: 216)
 - **Responsibility**: Core infra logic in src/infra/usage_db.rs
-- **Imports**: use crate :: domain :: usage :: { DailyUsage , ModelUsage , UsageSummary } , use anyhow :: { Context , Result } , use rusqlite :: params , use tokio_rusqlite :: Connection 
+- **Imports**: use crate :: domain :: usage :: { DailyUsage , ModelUsage , UsageFilter , UsageSummary } , use anyhow :: { Context , Result } , use rusqlite :: params , use tokio_rusqlite :: Connection 
 - **Public Functions & Signatures**:
   ```rust
   async fn init_usage_table (conn : & Connection) -> Result < () >
   async fn record_usage (conn : & Connection , model : & str , prompt_tokens : u32 , completion_tokens : u32 , token_id : Option < i64 > ,) -> Result < () >
   async fn get_all_summaries (conn : & Connection) -> Result < Vec < UsageSummary > >
+  async fn get_filtered_summaries (conn : & Connection , filter : & UsageFilter ,) -> Result < Vec < UsageSummary > >
   async fn get_daily_breakdown (conn : & Connection , limit : usize) -> Result < Vec < DailyUsage > >
+  async fn get_filtered_daily_breakdown (conn : & Connection , limit : usize , filter : & UsageFilter ,) -> Result < Vec < DailyUsage > >
   async fn get_model_breakdown (conn : & Connection) -> Result < Vec < ModelUsage > >
+  async fn get_filtered_model_breakdown (conn : & Connection , filter : & UsageFilter ,) -> Result < Vec < ModelUsage > >
   ```
 
-### `src/infra.rs` (Role: infra, Lines: 9)
+### `src/infra/watchdog.rs` (Role: infra, Lines: 60)
+- **Responsibility**: Core infra logic in src/infra/watchdog.rs
+- **Imports**: use crate :: infra :: db :: { get_tokens , mark_active , now_timestamp } , use anyhow :: Result , use std :: time :: Duration , use tokio_rusqlite :: Connection , use tracing :: info 
+- **Public Functions & Signatures**:
+  ```rust
+  async fn check_and_recover_tokens (conn : & Connection) -> Result < usize >
+  fn start_token_watchdog (conn : Connection , interval : Duration) -> tokio :: task :: JoinHandle < () >
+  ```
+
+### `src/infra.rs` (Role: infra, Lines: 10)
 - **Responsibility**: Core infra logic in src/infra.rs
 
 ### `src/lib.rs` (Role: general, Lines: 6)
 - **Responsibility**: Core general logic in src/lib.rs
 
-### `src/main.rs` (Role: general, Lines: 133)
+### `src/main.rs` (Role: general, Lines: 150)
 - **Responsibility**: Core general logic in src/main.rs
 - **Imports**: use anyhow :: { Context , Result } , use clap :: Parser , use deeperseeker :: api :: build_router , use deeperseeker :: api :: state :: AppState , use deeperseeker :: cli :: diagnostic :: run_diagnostics , use deeperseeker :: cli :: service :: { install_user_service , service_status , uninstall_user_service } , use deeperseeker :: cli :: token_cmd :: { add_token , list_tokens , remove_token , test_tokens } , use deeperseeker :: cli :: usage_cmd :: display_usage , use deeperseeker :: cli :: { Cli , Commands , ServeArgs , ServiceArgs , ServiceSubcommands , TokenArgs , TokenSubcommands , } , use deeperseeker :: config :: AppConfig , use deeperseeker :: infra :: db :: { init_db , open_db } , use deeperseeker :: infra :: deepseek_client :: DeepSeekClient , use deeperseeker :: infra :: pow :: PowSolver , use deeperseeker :: tui :: run_status , use std :: collections :: HashMap , use std :: sync :: Arc , use tera :: Tera , use tokio :: net :: TcpListener , use tokio :: sync :: Mutex , use tracing :: info 
 
