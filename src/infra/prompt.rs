@@ -3,9 +3,9 @@ use serde_json::Value;
 
 pub const TOOL_USE_INSTRUCTIONS: &str = "\
 TOOL USE INSTRUCTIONS:\n\
-You have access to tools. When you need to call a tool, output ONLY the tool call XML block and nothing else:\n\
+You have access to tools. When you need to call a tool, output tool call XML blocks:\n\
 <tool_call>{\"name\": \"tool_name\", \"arguments\": {\"param\": \"value\"}}</tool_call>\n\
-Never repeat past messages, history, or XML tags. Output exactly one tool call block when invoking a tool.";
+Never repeat past messages or history. You may output multiple <tool_call>...</tool_call> blocks to execute tools in parallel.";
 
 pub fn build_prompt_for_turn(
     messages: &[ChatMessage],

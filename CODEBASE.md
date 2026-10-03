@@ -1,4 +1,4 @@
-# CODEBASE.md: deeperseeker Semantic Digest — v0.2.15
+# CODEBASE.md: deeperseeker Semantic Digest — v0.2.16
 
 > **Notice**: AI-optimized semantic index. Do not write narrative prose. Keep token density high.
 

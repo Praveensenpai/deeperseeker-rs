@@ -30,7 +30,7 @@ static HERMES_PARAM_RE: Lazy<Regex> = Lazy::new(|| {
 });
 
 static JSON_TOOL_CALL_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?is)<tool_call>\s*(\{.*?\})\s*(?:</tool_call>|$)")
+    Regex::new(r"(?is)<tool_call>\s*(\{.*?\})\s*(?:</(?:tool_)?call>|$)")
         .expect("valid regex")
 });
 
@@ -41,17 +41,17 @@ static ATTR_STRING_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r#"(?i)\bstring\s*=\s*["']([^"']+)["']"#).expect("valid regex"));
 
 static STRIP_BLOCKS_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?is)<tool_call>.*?(?:</tool_call>|$)|<[｜\|\s]*(?:DSML[｜\|\s]*)?invoke\b[^>]*>.*?(?:</[｜\|\s]*(?:DSML[｜\|\s]*)?invoke>|$)|<function_call>.*?(?:</function_call>|$)")
+    Regex::new(r"(?is)<tool_call>.*?(?:</(?:tool_)?call>|$)|<[｜\|\s]*(?:DSML[｜\|\s]*)?invoke\b[^>]*>.*?(?:</[｜\|\s]*(?:DSML[｜\|\s]*)?invoke>|$)|<function_call>.*?(?:</function_call>|$)")
         .expect("valid regex")
 });
 
 static STRIP_TAGS_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?is)</?[｜\|\s]*(?:DSML[｜\|\s]*)?(?:tool_calls?|calls|function_calls?|invoke|parameter|tool_call|function_call|content|function)\b[^>]*>|FINISHED$")
+    Regex::new(r"(?is)</?[｜\|\s]*(?:DSML[｜\|\s]*)?(?:tool_calls?|calls|function_calls?|invoke|parameter|tool_call|function_call|content|function|call)\b[^>]*>|FINISHED$")
         .expect("valid regex")
 });
 
 static DSML_START_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)<[｜\|\s]*(?:dsml|invoke|tool_calls?|calls|function_calls?)\b|<(?:tool_call|function_call)\b|<function=")
+    Regex::new(r"(?i)<[｜\|\s]*(?:dsml|invoke|tool_calls?|calls|function_calls?)\b|<(?:tool_call|function_call)\b|<function=|<call\b")
         .expect("valid regex")
 });
 
@@ -87,7 +87,7 @@ fn is_potential_dsml_prefix(suffix: &str) -> bool {
         return true;
     }
     const PREFIXES: &[&str] = &[
-        "dsml", "invoke", "tool_call", "tool_calls", "function_call", "function", "calls", "parameter",
+        "dsml", "invoke", "tool_call", "tool_calls", "function_call", "function", "calls", "parameter", "call",
     ];
     PREFIXES.iter().any(|p| p.starts_with(trimmed) || trimmed.starts_with(p))
 }
@@ -98,7 +98,8 @@ pub fn parse_dsml(text: &str) -> ParsedDsml {
         || text.contains("invoke")
         || text.contains("tool_call")
         || text.contains("function=")
-        || text.contains("function_call");
+        || text.contains("function_call")
+        || text.contains("</call>");
 
     if !has_markers {
         return ParsedDsml {
@@ -356,10 +357,12 @@ mod tests {
     }
 
     #[test]
-    fn test_strip_stray_dsml_tags() {
-        let raw = "pub fn test() {}\n</content>\n</| DSML | parameter>\n</| DSML | invoke>\n</| DSML | calls>";
+    fn test_parse_multiple_json_tool_calls_mixed_tags() {
+        let raw = "Reading files.\n<tool_call>{\"name\": \"read\", \"arguments\": {\"filePath\": \"a.py\"}}</tool_call>\n<tool_call>{\"name\": \"read\", \"arguments\": {\"filePath\": \"b.py\"}}</call>\n</｜DSML｜ invoke>";
         let parsed = parse_dsml(raw);
-        assert_eq!(parsed.text_content, "pub fn test() {}");
-        assert!(parsed.tool_calls.is_empty());
+        assert_eq!(parsed.text_content, "Reading files.");
+        assert_eq!(parsed.tool_calls.len(), 2);
+        assert_eq!(parsed.tool_calls[0].function.name, "read");
+        assert_eq!(parsed.tool_calls[1].function.name, "read");
     }
 }
