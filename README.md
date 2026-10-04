@@ -12,7 +12,7 @@
 *Ultra-low latency, memory-efficient reverse proxy bridging DeepSeek's Web API to OpenAI and Claude compatible endpoints.*  
 *Rust rewrite of [DeeperSeeker](https://github.com/AmanCode22/deeperseeker) by [AmanCode22](https://github.com/AmanCode22).*
 
-[⚡ Quick Start](#-quick-start) • [✨ Key Features](#-key-features) • [⚡ Why Rust?](#-why-deeperseeker-rs-rust-vs-python) • [🎥 Showcase](#-usage-showcase) • [🎨 Web Dashboard](#-web-administration-dashboard) • [🔑 DeepSeek Token Setup](#-deepseek-token-setup) • [💻 CLI Ergonomics](#-cli-ergonomics) • [📊 Token Usage Analytics](#-token-usage-analytics) • [🏛️ Architecture](#%EF%B8%8F-architecture) • [🔌 API & Demos](#-api-usage) • [⚠️ Disclaimer](#%EF%B8%8F-disclaimer) • [🙏 Credits](#-acknowledgements--credits)
+[⚡ Quick Start](#-quick-start) • [🐳 Docker](#-docker-deployment) • [✨ Key Features](#-key-features) • [⚡ Why Rust?](#-why-deeperseeker-rs-rust-vs-python) • [🎥 Showcase](#-usage-showcase) • [🎨 Web Dashboard](#-web-administration-dashboard) • [🔑 DeepSeek Token Setup](#-deepseek-token-setup) • [💻 CLI Ergonomics](#-cli-ergonomics) • [📊 Token Usage Analytics](#-token-usage-analytics) • [🏛️ Architecture](#%EF%B8%8F-architecture) • [🔌 API & Demos](#-api-usage) • [⚠️ Disclaimer](#%EF%B8%8F-disclaimer) • [🙏 Credits](#-acknowledgements--credits)
 
 </div>
 
@@ -49,6 +49,33 @@ cargo build --release
 ```
 
 The server listens on `http://127.0.0.1:4000` by default.
+
+### 🐳 Docker Deployment
+
+#### Using Docker Compose (Recommended)
+
+```bash
+# Clone the repository
+git clone https://github.com/Praveensenpai/deeperseeker-rs.git
+cd deeperseeker-rs
+
+# Launch the container in the background
+docker compose up -d
+```
+
+#### Using Docker CLI Directly
+
+```bash
+# Run with persistent volume mount for the SQLite database
+docker run -d \
+  --name deeperseeker \
+  -p 4000:4000 \
+  -v deeperseeker_data:/data \
+  --restart unless-stopped \
+  deeperseeker:latest
+```
+
+All credentials and options can be configured via environment variables (`DEEPSEEKER_API_KEY`, `DEEPSEEKER_ADMIN_PASS`, `DEEPSEEKER_REQUEST_GAP`).
 
 ---
 

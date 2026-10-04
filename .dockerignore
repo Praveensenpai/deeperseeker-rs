@@ -1,0 +1,12 @@
+target/
+.git/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.env
+.env.*
+!.env.example
+*.log
+scratch/
+RELEASE_NOTES_*.md

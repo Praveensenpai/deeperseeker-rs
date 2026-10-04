@@ -1,0 +1,25 @@
+services:
+  deeperseeker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: deeperseeker:latest
+    container_name: deeperseeker
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      - DEEPSEEKER_HOST=0.0.0.0
+      - DEEPSEEKER_PORT=4000
+      - DEEPSEEKER_API_KEY=dseeker
+      - DEEPSEEKER_ADMIN_USER=admin
+      - DEEPSEEKER_ADMIN_PASS=admin
+      - DEEPSEEKER_DB_PATH=/data/deeperseeker.db
+      - DEEPSEEKER_REQUEST_GAP=2.5
+      - RUST_LOG=info
+    volumes:
+      - deeperseeker_data:/data
+
+volumes:
+  deeperseeker_data:
+    driver: local
