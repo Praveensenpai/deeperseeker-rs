@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: deeperseeker:latest
+    image: ghcr.io/praveensenpai/deeperseeker-rs:latest
     container_name: deeperseeker
     restart: unless-stopped
     ports:

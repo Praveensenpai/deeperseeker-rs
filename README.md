@@ -72,7 +72,7 @@ docker run -d \
   -p 4000:4000 \
   -v deeperseeker_data:/data \
   --restart unless-stopped \
-  deeperseeker:latest
+  ghcr.io/praveensenpai/deeperseeker-rs:latest
 ```
 
 All credentials and options can be configured via environment variables (`DEEPSEEKER_API_KEY`, `DEEPSEEKER_ADMIN_PASS`, `DEEPSEEKER_REQUEST_GAP`).
