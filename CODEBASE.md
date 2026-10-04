@@ -401,6 +401,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn find_dsml_block_start (text : & str) -> Option < usize >
   fn safe_unambiguous_len (text : & str) -> usize
   fn parse_dsml (text : & str) -> ParsedDsml
+  fn clean_history_text (text : & str) -> String
   ```
 
 ### `src/infra/media.rs` (Role: infra, Lines: 206)

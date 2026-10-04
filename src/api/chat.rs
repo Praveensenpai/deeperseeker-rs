@@ -36,8 +36,14 @@ pub async fn chat_completions(
     }
 
     Err((
-        StatusCode::SERVICE_UNAVAILABLE,
-        Json(json!({"error": {"message": "All tokens exhausted or rate limited"}})),
+        StatusCode::TOO_MANY_REQUESTS,
+        Json(json!({
+            "error": {
+                "message": "All tokens exhausted or rate limited. Please retry in a moment.",
+                "type": "rate_limit_error",
+                "code": "rate_limit_exceeded"
+            }
+        })),
     ))
 }
 
@@ -54,6 +60,17 @@ pub(crate) struct PreparedSession {
     pub is_first: bool,
 }
 
+async fn pace_token_request(state: &AppState, last_used: Option<f64>) {
+    if let Some(last) = last_used {
+        let elapsed = crate::infra::db::now_timestamp() - last;
+        let gap = state.config.request_gap;
+        if elapsed < gap && elapsed >= 0.0 {
+            let sleep_ms = ((gap - elapsed) * 1000.0) as u64;
+            tokio::time::sleep(std::time::Duration::from_millis(sleep_ms)).await;
+        }
+    }
+}
+
 async fn execute_completion_attempt(
     state: &AppState,
     req: &ChatCompletionRequest,
@@ -62,6 +79,8 @@ async fn execute_completion_attempt(
     let prep = prepare_session(state, req, exclude).await?;
     let token_id = prep.token.id;
     state.increment_in_flight(token_id).await;
+
+    pace_token_request(state, prep.token.last_used).await;
 
     let res = run_chat_request(state, req, &prep).await;
     state.decrement_in_flight(token_id).await;
@@ -88,6 +107,7 @@ async fn execute_completion_attempt(
                 let fresh_prep = create_fresh_session(state, req, exclude).await?;
                 let fresh_token_id = fresh_prep.token.id;
                 state.increment_in_flight(fresh_token_id).await;
+                pace_token_request(state, fresh_prep.token.last_used).await;
                 let fresh_res = run_chat_request(state, req, &fresh_prep).await;
                 state.decrement_in_flight(fresh_token_id).await;
                 if fresh_res.is_ok() {
@@ -139,9 +159,10 @@ async fn try_resume_session(
     }
 
     let elapsed = crate::infra::db::now_timestamp() - sess.last_used;
-    if elapsed < 1.25 {
+    let gap = state.config.request_gap;
+    if elapsed < gap && elapsed >= 0.0 {
         tokio::time::sleep(std::time::Duration::from_millis(
-            ((1.25 - elapsed) * 1000.0) as u64,
+            ((gap - elapsed) * 1000.0) as u64,
         ))
         .await;
     }

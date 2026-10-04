@@ -5,25 +5,28 @@ use serde_json::Value;
 use uuid::Uuid;
 
 static CALLS_BLOCK_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?is)<[/｜\|\s]*(?:DSML[/｜\|\s]*)?(?:calls|tool_calls)[^>]*>(.*?)(?:</[｜\|\s]*(?:DSML[｜\|\s]*)?(?:calls|tool_calls)[^>]*>|$)")
+    Regex::new(r"(?is)<\s*[｜\|\s]*(?:DSML[\s｜\|\s]*)?(?:calls|tool_calls)[^>]*>(.*?)(?:<\s*/[\s｜\|\s]*(?:DSML[\s｜\|\s]*)?(?:calls|tool_calls)[^>]*>|$)")
         .expect("valid regex")
 });
 
 static INVOKE_BLOCK_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?is)<[/｜\|\s]*(?:DSML[/｜\|\s]*)?invoke\b([^>]*)>(.*?)(?:</[｜\|\s]*(?:DSML[｜\|\s]*)?invoke[^>]*>|$)")
+    Regex::new(r"(?is)<\s*[｜\|\s]*(?:DSML[\s｜\|\s]*)?invoke\b([^>]*)>(.*?)(?:<\s*/[\s｜\|\s]*(?:DSML[\s｜\|\s]*)?invoke[^>]*>|$)")
         .expect("valid regex")
 });
 
 static PARAM_TAG_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r#"(?is)<?[/｜\|\s]*(?:DSML[/｜\|\s]*)?parameter\b([^>]*)>"#).expect("valid regex")
+    Regex::new(r#"(?is)<?\s*[/｜\|\s]*(?:DSML[\s｜\|\s]*)?parameter\b([^>]*)>"#)
+        .expect("valid regex")
 });
 
 static HERMES_FUNCTION_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?is)<function=([a-zA-Z0-9_\-]+)>(.*?)(?:</function>|$)").expect("valid regex")
+    Regex::new(r"(?is)<\s*function=([a-zA-Z0-9_\-]+)>(.*?)(?:<\s*/function>|$)")
+        .expect("valid regex")
 });
 
 static HERMES_PARAM_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?is)<parameter=([a-zA-Z0-9_\-]+)>(.*?)(?:</parameter>|$)").expect("valid regex")
+    Regex::new(r"(?is)<\s*parameter=([a-zA-Z0-9_\-]+)>(.*?)(?:<\s*/parameter>|$)")
+        .expect("valid regex")
 });
 
 static ATTR_NAME_RE: Lazy<Regex> =
@@ -33,17 +36,17 @@ static ATTR_STRING_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r#"(?i)\bstring\s*=\s*["']([^"']+)["']"#).expect("valid regex"));
 
 static STRIP_BLOCKS_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?is)<tool_call>.*?(?:</(?:tool_)?call>|$)|<[｜\|\s]*(?:DSML[｜\|\s]*)?invoke\b[^>]*>.*?(?:</[｜\|\s]*(?:DSML[｜\|\s]*)?invoke>|$)|<function_call>.*?(?:</function_call>|$)")
+    Regex::new(r"(?is)<\s*tool_call>.*?(?:<\s*/(?:tool_)?call>|$)|<\s*[/｜\|\s]*(?:DSML[\s｜\|\s]*)?invoke\b[^>]*>.*?(?:<\s*/[\s｜\|\s]*(?:DSML[\s｜\|\s]*)?invoke>|$)|<\s*function_call>.*?(?:<\s*/function_call>|$)")
         .expect("valid regex")
 });
 
 static STRIP_TAGS_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?is)<?/?[｜\|\s]*(?:DSML[｜\|\s]*)?(?:tool_calls?|calls|function_calls?|invoke|parameter|tool_call|function_call|content|function|call)\b[^>]*>|FINISHED$")
+    Regex::new(r"(?is)<?\s*/?[\s｜\|\s]*(?:DSML[\s｜\|\s]*)?(?:tool_calls?|calls|function_calls?|invoke|parameter|tool_call|function_call|content|function|call)\b[^>]*>|FINISHED$")
         .expect("valid regex")
 });
 
 static DSML_START_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)<[｜\|\s]*(?:dsml|invoke|tool_calls?|calls|function_calls?)\b|<(?:tool_call|function_call)\b|<function=|<call\b")
+    Regex::new(r"(?i)<\s*[｜\|\s]*(?:dsml|invoke|tool_calls?|calls|function_calls?)\b|<\s*(?:tool_call|function_call)\b|<\s*function=|<\s*call\b")
         .expect("valid regex")
 });
 
@@ -135,22 +138,44 @@ pub fn parse_dsml(text: &str) -> ParsedDsml {
     }
 }
 
-fn extract_tool_calls(text: &str) -> Vec<ToolCall> {
-    let mut tool_calls = Vec::new();
-    let session_prefix = Uuid::new_v4().simple().to_string();
-
-    extract_dsml_invokes(text, &session_prefix, &mut tool_calls);
-    if tool_calls.is_empty() {
-        extract_hermes_tool_calls(text, &session_prefix, &mut tool_calls);
-    }
-    if tool_calls.is_empty() {
-        extract_json_tool_calls(text, &session_prefix, &mut tool_calls);
-    }
-
-    tool_calls
+pub fn clean_history_text(text: &str) -> String {
+    let without_blocks = STRIP_BLOCKS_RE.replace_all(text, "");
+    STRIP_TAGS_RE
+        .replace_all(&without_blocks, "")
+        .trim()
+        .to_string()
 }
 
-fn extract_dsml_invokes(text: &str, session_prefix: &str, tool_calls: &mut Vec<ToolCall>) {
+fn extract_tool_calls(text: &str) -> Vec<ToolCall> {
+    let mut positioned_calls = Vec::new();
+    let session_prefix = Uuid::new_v4().simple().to_string();
+
+    extract_dsml_invokes(text, &session_prefix, &mut positioned_calls);
+    extract_hermes_tool_calls(text, &session_prefix, &mut positioned_calls);
+    extract_json_tool_calls(text, &session_prefix, &mut positioned_calls);
+
+    positioned_calls.sort_by_key(|(pos, _)| *pos);
+
+    let mut unique_calls = Vec::new();
+    for (_, tc) in positioned_calls {
+        let is_dup = unique_calls.iter().any(|u: &ToolCall| {
+            u.function.name == tc.function.name && u.function.arguments == tc.function.arguments
+        });
+        if !is_dup {
+            unique_calls.push(tc);
+        }
+    }
+    for (i, tc) in unique_calls.iter_mut().enumerate() {
+        tc.index = Some(i);
+        tc.id = format!(
+            "call_{}_{i}",
+            &session_prefix[..8.min(session_prefix.len())]
+        );
+    }
+    unique_calls
+}
+
+fn extract_dsml_invokes(text: &str, session_prefix: &str, tool_calls: &mut Vec<(usize, ToolCall)>) {
     let body_text = if let Some(cap) = CALLS_BLOCK_RE.captures(text) {
         cap.get(1).map(|m| m.as_str()).unwrap_or(text)
     } else {
@@ -158,6 +183,8 @@ fn extract_dsml_invokes(text: &str, session_prefix: &str, tool_calls: &mut Vec<T
     };
 
     for (idx, cap) in INVOKE_BLOCK_RE.captures_iter(body_text).enumerate() {
+        let full_match = cap.get(0).unwrap();
+        let pos = full_match.start();
         let attrs = cap.get(1).map(|m| m.as_str()).unwrap_or("");
         let Some(name_match) = ATTR_NAME_RE.captures(attrs).and_then(|c| c.get(1)) else {
             continue;
@@ -166,20 +193,29 @@ fn extract_dsml_invokes(text: &str, session_prefix: &str, tool_calls: &mut Vec<T
         let invoke_body = cap.get(2).map(|m| m.as_str()).unwrap_or("");
         let arguments = extract_arguments(invoke_body);
 
-        tool_calls.push(ToolCall {
-            index: Some(idx),
-            id: format!("call_{}_{idx}", &session_prefix[..8]),
-            r#type: "function".to_string(),
-            function: FunctionCall {
-                name: tool_name,
-                arguments,
+        tool_calls.push((
+            pos,
+            ToolCall {
+                index: Some(idx),
+                id: format!("call_{}_{idx}", &session_prefix[..8]),
+                r#type: "function".to_string(),
+                function: FunctionCall {
+                    name: tool_name,
+                    arguments,
+                },
             },
-        });
+        ));
     }
 }
 
-fn extract_hermes_tool_calls(text: &str, session_prefix: &str, tool_calls: &mut Vec<ToolCall>) {
+fn extract_hermes_tool_calls(
+    text: &str,
+    session_prefix: &str,
+    tool_calls: &mut Vec<(usize, ToolCall)>,
+) {
     for (idx, cap) in HERMES_FUNCTION_RE.captures_iter(text).enumerate() {
+        let full_match = cap.get(0).unwrap();
+        let pos = full_match.start();
         let Some(name_match) = cap.get(1) else {
             continue;
         };
@@ -196,33 +232,64 @@ fn extract_hermes_tool_calls(text: &str, session_prefix: &str, tool_calls: &mut 
         }
 
         let arguments = serde_json::to_string(&args_map).unwrap_or_else(|_| "{}".to_string());
-        tool_calls.push(ToolCall {
-            index: Some(idx),
-            id: format!("call_{}_{idx}", &session_prefix[..8]),
-            r#type: "function".to_string(),
-            function: FunctionCall {
-                name: tool_name,
-                arguments,
+        tool_calls.push((
+            pos,
+            ToolCall {
+                index: Some(idx),
+                id: format!("call_{}_{idx}", &session_prefix[..8]),
+                r#type: "function".to_string(),
+                function: FunctionCall {
+                    name: tool_name,
+                    arguments,
+                },
             },
-        });
+        ));
     }
 }
 
-fn extract_json_tool_calls(text: &str, session_prefix: &str, tool_calls: &mut Vec<ToolCall>) {
+fn extract_json_tool_calls(
+    text: &str,
+    session_prefix: &str,
+    tool_calls: &mut Vec<(usize, ToolCall)>,
+) {
     let mut search_idx = 0;
     while let Some(start_pos) = text[search_idx..].find("<tool_call>") {
-        let tag_end = search_idx + start_pos + "<tool_call>".len();
+        let abs_start = search_idx + start_pos;
+        let tag_end = abs_start + "<tool_call>".len();
         let slice = &text[tag_end..];
         let Some(brace_rel) = slice.find('{') else {
             search_idx = tag_end;
             continue;
         };
         let json_start = tag_end + brace_rel;
-        let mut de = serde_json::Deserializer::from_str(&text[json_start..]).into_iter::<Value>();
-        if let Some(Ok(val)) = de.next() {
-            let offset = de.byte_offset();
-            search_idx = json_start + offset;
+        let candidate = &text[json_start..];
+        let mut parsed_val = None;
+        let mut consumed_bytes = 0;
 
+        let mut de = serde_json::Deserializer::from_str(candidate).into_iter::<Value>();
+        if let Some(Ok(val)) = de.next() {
+            consumed_bytes = de.byte_offset();
+            parsed_val = Some(val);
+        } else {
+            let end_limit = candidate
+                .find("</tool_call>")
+                .or_else(|| candidate.find("</call>"))
+                .or_else(|| candidate.find('<'))
+                .unwrap_or(candidate.len());
+            let sub = candidate[..end_limit].trim_end();
+            let open_braces = sub.chars().filter(|&c| c == '{').count();
+            let close_braces = sub.chars().filter(|&c| c == '}').count();
+            if open_braces > close_braces {
+                let repaired = format!("{}{}", sub, "}".repeat(open_braces - close_braces));
+                if let Ok(val) = serde_json::from_str::<Value>(&repaired) {
+                    consumed_bytes = sub.len();
+                    parsed_val = Some(val);
+                }
+            }
+        }
+
+        if let Some(val) = parsed_val {
+            search_idx = json_start + consumed_bytes;
             let Some(name) = val
                 .get("name")
                 .or_else(|| val.get("tool"))
@@ -238,19 +305,22 @@ fn extract_json_tool_calls(text: &str, session_prefix: &str, tool_calls: &mut Ve
             };
 
             let prefix_len = 8.min(session_prefix.len());
-            tool_calls.push(ToolCall {
-                index: Some(tool_calls.len()),
-                id: format!(
-                    "call_{}_{}",
-                    &session_prefix[..prefix_len],
-                    tool_calls.len()
-                ),
-                r#type: "function".to_string(),
-                function: FunctionCall {
-                    name: name.to_string(),
-                    arguments,
+            tool_calls.push((
+                abs_start,
+                ToolCall {
+                    index: Some(tool_calls.len()),
+                    id: format!(
+                        "call_{}_{}",
+                        &session_prefix[..prefix_len],
+                        tool_calls.len()
+                    ),
+                    r#type: "function".to_string(),
+                    function: FunctionCall {
+                        name: name.to_string(),
+                        arguments,
+                    },
                 },
-            });
+            ));
         } else {
             search_idx = tag_end;
         }
@@ -284,6 +354,20 @@ fn extract_arguments(invoke_body: &str) -> String {
             let raw_val = &invoke_body[val_start..val_end];
             let clean_val = STRIP_TAGS_RE.replace_all(raw_val, "").trim().to_string();
             insert_param_value(&mut args_map, param_name, &clean_val, is_str);
+        }
+        if args_map.len() == 1 {
+            if let Some(val) = args_map
+                .get("arguments")
+                .or_else(|| args_map.get("parameters"))
+            {
+                if let Value::Object(_) = val {
+                    return serde_json::to_string(val).unwrap_or_else(|_| "{}".to_string());
+                } else if let Value::String(s) = val {
+                    if s.trim().starts_with('{') && s.trim().ends_with('}') {
+                        return s.trim().to_string();
+                    }
+                }
+            }
         }
         return serde_json::to_string(&args_map).unwrap_or_else(|_| "{}".to_string());
     }
@@ -446,5 +530,31 @@ mod tests {
             .function
             .arguments
             .contains(r#""newString":"def new(): pass""#));
+    }
+
+    #[test]
+    fn test_parse_hybrid_spaced_dsml_leak() {
+        let raw = r#"Regression test passes.
+
+<tool_call>{"name": "shell", "arguments": {"command": "curl http://localhost:8096"}
+< / | DSML | | parameter>
+< / | DSML | | invoke>
+< | | DSML | | invoke name="shell" string="false">true< / | DSML | | parameter>
+< | | DSML | | parameter name="arguments">{"command": "cargo build --release"}
+< / | DSML | | invoke>
+< / | DSML | | calls>"#;
+        let parsed = parse_dsml(raw);
+        assert_eq!(parsed.text_content, "Regression test passes.");
+        assert_eq!(parsed.tool_calls.len(), 2);
+        assert_eq!(parsed.tool_calls[0].function.name, "shell");
+        assert!(parsed.tool_calls[0]
+            .function
+            .arguments
+            .contains("curl http://localhost:8096"));
+        assert_eq!(parsed.tool_calls[1].function.name, "shell");
+        assert!(parsed.tool_calls[1]
+            .function
+            .arguments
+            .contains("cargo build --release"));
     }
 }

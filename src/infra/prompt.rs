@@ -143,13 +143,21 @@ fn build_conversation_history(messages: &[ChatMessage]) -> String {
                 ));
             }
             let calls_str = tc_blocks.join("\n");
-            if text.trim().is_empty() {
+            let clean_text = crate::infra::dsml::clean_history_text(&text);
+            if clean_text.is_empty() {
                 history.push_str(&format!("{role}: {calls_str}\n"));
             } else {
-                history.push_str(&format!("{role}: {}\n{calls_str}\n", text.trim()));
+                history.push_str(&format!("{role}: {clean_text}\n{calls_str}\n"));
             }
         } else if !text.trim().is_empty() {
-            history.push_str(&format!("{role}: {}\n", text.trim()));
+            let clean_text = if msg.role == "assistant" {
+                crate::infra::dsml::clean_history_text(&text)
+            } else {
+                text.trim().to_string()
+            };
+            if !clean_text.is_empty() {
+                history.push_str(&format!("{role}: {clean_text}\n"));
+            }
         }
     }
     history
@@ -178,12 +186,14 @@ fn build_continuing_prompt(messages: &[ChatMessage], tools: Option<&[Value]>) ->
             continue;
         }
         let text = msg.content.as_text();
-        if text.is_empty() {
-            continue;
-        }
         if msg.role == "tool" {
-            user_parts.push(format!("[TOOL OUTPUT]\n{}", text.trim()));
-        } else {
+            let output = if text.trim().is_empty() {
+                "(completed with empty output)"
+            } else {
+                text.trim()
+            };
+            user_parts.push(format!("[TOOL OUTPUT]\n{output}"));
+        } else if !text.trim().is_empty() {
             user_parts.push(text);
         }
     }

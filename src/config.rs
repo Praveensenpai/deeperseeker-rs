@@ -12,6 +12,7 @@ pub struct AppConfig {
     pub session_secret: String,
     pub token_concurrency: usize,
     pub cookie_cooldown: u64,
+    pub request_gap: f64,
 }
 
 impl AppConfig {
@@ -40,6 +41,10 @@ impl AppConfig {
             .ok()
             .and_then(|c| c.parse().ok())
             .unwrap_or(20);
+        let request_gap = env::var("DEEPSEEKER_REQUEST_GAP")
+            .ok()
+            .and_then(|g| g.parse().ok())
+            .unwrap_or(2.5);
 
         Self {
             host,
@@ -52,6 +57,7 @@ impl AppConfig {
             session_secret,
             token_concurrency,
             cookie_cooldown,
+            request_gap,
         }
     }
 }

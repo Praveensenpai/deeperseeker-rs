@@ -111,15 +111,22 @@ pub async fn handle_streaming_response(
 
             if attempt < 3 {
                 let wait_ms = match attempt {
-                    0 => 1500,
-                    1 => 2500,
-                    _ => 3500,
+                    0 => (state.config.request_gap * 1000.0) as u64,
+                    1 => (state.config.request_gap * 1500.0) as u64,
+                    _ => (state.config.request_gap * 2000.0) as u64,
                 };
                 tracing::warn!("Retrying with fresh session after {wait_ms}ms...");
                 let _ = crate::infra::db::delete_sessions_for_chat(&db, cur_tok, &cur_sess).await;
+
+                let mut exclude = Vec::new();
+                if stream_state.upstream_error.is_some() {
+                    let _ = crate::infra::db::mark_limited(&db, cur_tok, state.config.cookie_cooldown).await;
+                    exclude.push(cur_tok);
+                }
+
                 tokio::time::sleep(std::time::Duration::from_millis(wait_ms)).await;
 
-                if let Ok(fresh_prep) = crate::api::chat::create_fresh_session(&state, &req, &[]).await {
+                if let Ok(fresh_prep) = crate::api::chat::create_fresh_session(&state, &req, &exclude).await {
                     if let Ok(comp_args) = crate::api::chat::prepare_completion_args(&state, &req, &fresh_prep).await {
                         if let Ok(new_resp) = state.client.send_completion_request(comp_args).await {
                             cur_sess = fresh_prep.session_id;
@@ -137,8 +144,16 @@ pub async fn handle_streaming_response(
             let err_msg = stream_state
                 .upstream_error
                 .unwrap_or_else(|| "DeepSeek returned empty completion".to_string());
+            let is_rate_limit = err_msg.contains("Too many requests")
+                || err_msg.contains("being generated")
+                || err_msg.contains("rate limit");
+            let (err_type, err_code) = if is_rate_limit {
+                ("rate_limit_error", "rate_limit_exceeded")
+            } else {
+                ("upstream_error", "upstream_error")
+            };
             let err_obj = serde_json::json!({
-                "error": { "message": err_msg, "type": "upstream_error" }
+                "error": { "message": err_msg, "type": err_type, "code": err_code }
             });
             yield Ok(format!("data: {err_obj}\n\n"));
             yield Ok("data: [DONE]\n\n".to_string());
@@ -223,15 +238,16 @@ fn emit_final_tool_or_text(
             .ok()
             .map(|j| format!("data: {j}\n\n"))
     } else if state.streamed_len < state.full_content.len() {
-        let chunk = make_text_chunk(
-            ctx.chat_id,
-            ctx.created,
-            ctx.model,
-            &state.full_content[state.streamed_len..],
-        );
-        serde_json::to_string(&chunk)
-            .ok()
-            .map(|j| format!("data: {j}\n\n"))
+        let remaining = &state.full_content[state.streamed_len..];
+        let cleaned = crate::infra::dsml::clean_history_text(remaining);
+        if cleaned.is_empty() {
+            None
+        } else {
+            let chunk = make_text_chunk(ctx.chat_id, ctx.created, ctx.model, &cleaned);
+            serde_json::to_string(&chunk)
+                .ok()
+                .map(|j| format!("data: {j}\n\n"))
+        }
     } else {
         None
     }
@@ -348,7 +364,7 @@ pub async fn handle_unary_response(
     .await;
 
     let (content, tool_calls, finish_reason) = if parsed.tool_calls.is_empty() {
-        (raw_content, None, "stop".to_string())
+        (parsed.text_content, None, "stop".to_string())
     } else {
         (
             parsed.text_content,
