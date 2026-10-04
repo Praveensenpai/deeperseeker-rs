@@ -98,10 +98,15 @@
         <table class="data-table">
             <thead>
                 <tr>
-                    <th style="width: 60px;">ID</th>
+                    <th style="width: 50px;">ID</th>
                     <th>Alias</th>
-                    <th>Masked Token</th>
                     <th>Status</th>
+                    <th>Reqs</th>
+                    <th>Prompt</th>
+                    <th>Compl</th>
+                    <th>Total</th>
+                    <th>Hit Rate</th>
+                    <th>Masked Token</th>
                     <th style="text-align: right;">Action</th>
                 </tr>
             </thead>
@@ -111,9 +116,6 @@
                     <td style="font-family: var(--font-mono); font-weight: 600;">#{{ tok.id }}</td>
                     <td style="font-weight: 500; color: var(--text-primary);">{{ tok.alias | default(value="—") }}</td>
                     <td>
-                        <code style="font-family: var(--font-mono); font-size: 0.8rem;">{{ tok.masked }}</code>
-                    </td>
-                    <td>
                         {% if tok.status == "ACTIVE" %}
                             <span class="badge badge-active">● Active</span>
                         {% elif tok.status == "RATE_LIMITED" %}
@@ -121,6 +123,14 @@
                         {% else %}
                             <span class="badge" style="background: rgba(244,63,94,0.12); color: var(--accent-rose);">○ Suspended</span>
                         {% endif %}
+                    </td>
+                    <td style="font-family: var(--font-mono);">{{ tok.requests }}</td>
+                    <td style="font-family: var(--font-mono);">{{ tok.prompt_tokens }}</td>
+                    <td style="font-family: var(--font-mono);">{{ tok.completion_tokens }}</td>
+                    <td style="font-family: var(--font-mono); font-weight: 600; color: var(--accent-emerald);">{{ tok.total_tokens }}</td>
+                    <td style="font-family: var(--font-mono); color: var(--accent-cyan);">{{ tok.cache_rate }}</td>
+                    <td>
+                        <code style="font-family: var(--font-mono); font-size: 0.8rem;">{{ tok.masked }}</code>
                     </td>
                     <td style="text-align: right;">
                         <form method="post" action="/tokens/{{ tok.id }}/delete" style="display:inline" onsubmit="return confirm('Delete token #{{ tok.id }}?')">

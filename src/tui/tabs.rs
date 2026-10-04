@@ -1,5 +1,5 @@
 use crate::domain::token::Token;
-use crate::domain::usage::{format_metric, UsageSummary};
+use crate::domain::usage::{format_metric, TokenUsage, UsageSummary};
 use crate::tui::views::RenderState;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -8,6 +8,7 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Cell, Gauge, Paragraph, Row, Table, Wrap},
     Frame,
 };
+use std::collections::HashMap;
 
 pub fn render_monitor_tab(f: &mut Frame, area: Rect, state: &RenderState) {
     let sub = Layout::default()
@@ -16,7 +17,7 @@ pub fn render_monitor_tab(f: &mut Frame, area: Rect, state: &RenderState) {
         .split(area);
 
     render_monitor_gauges(f, sub[0], state);
-    render_tokens_table(f, sub[1], state.tokens);
+    render_tokens_table(f, sub[1], state.tokens, state.token_usages);
 }
 
 fn render_monitor_gauges(f: &mut Frame, area: Rect, state: &RenderState) {
@@ -168,10 +169,10 @@ pub fn render_usage_tab(f: &mut Frame, area: Rect, summaries: &[UsageSummary]) {
 }
 
 pub fn render_tokens_tab(f: &mut Frame, area: Rect, state: &RenderState) {
-    render_tokens_table(f, area, state.tokens);
+    render_tokens_table(f, area, state.tokens, state.token_usages);
 }
 
-fn build_token_row(t: &Token) -> Row<'_> {
+fn build_token_row<'a>(t: &'a Token, usage: Option<&TokenUsage>) -> Row<'a> {
     let status_style = match t.status.as_str() {
         "ACTIVE" => Style::default().fg(Color::Green),
         "RATE_LIMITED" => Style::default().fg(Color::Yellow),
@@ -182,15 +183,46 @@ fn build_token_row(t: &Token) -> Row<'_> {
     } else {
         "***".to_string()
     };
+    let (reqs, p, c, tot, hit_rate) = match usage {
+        Some(u) => (
+            format_metric(u.requests, false),
+            format_metric(u.prompt_tokens, false),
+            format_metric(u.completion_tokens, false),
+            format_metric(u.total_tokens, false),
+            format!("{:.1}%", u.cache_hit_rate()),
+        ),
+        None => (
+            "0".to_string(),
+            "0".to_string(),
+            "0".to_string(),
+            "0".to_string(),
+            "0.0%".to_string(),
+        ),
+    };
+
     Row::new(vec![
         Cell::from(t.id.to_string()),
         Cell::from(t.alias.as_deref().unwrap_or("-")),
         Cell::from(t.status.clone()).style(status_style),
+        Cell::from(reqs),
+        Cell::from(p),
+        Cell::from(c),
+        Cell::from(tot).style(
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Cell::from(hit_rate).style(Style::default().fg(Color::Cyan)),
         Cell::from(masked),
     ])
 }
 
-pub fn render_tokens_table(f: &mut Frame, area: Rect, tokens: &[Token]) {
+pub fn render_tokens_table(
+    f: &mut Frame,
+    area: Rect,
+    tokens: &[Token],
+    usages: &HashMap<i64, TokenUsage>,
+) {
     let header = Row::new(vec![
         Cell::from("ID").style(
             Style::default()
@@ -207,6 +239,31 @@ pub fn render_tokens_table(f: &mut Frame, area: Rect, tokens: &[Token]) {
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
         ),
+        Cell::from("Reqs").style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Cell::from("Prompt").style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Cell::from("Compl").style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Cell::from("Total").style(
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Cell::from("Hit Rate").style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
         Cell::from("Token (Masked)").style(
             Style::default()
                 .fg(Color::Cyan)
@@ -215,17 +272,25 @@ pub fn render_tokens_table(f: &mut Frame, area: Rect, tokens: &[Token]) {
     ])
     .bottom_margin(1);
 
-    let rows: Vec<Row> = tokens.iter().map(build_token_row).collect();
+    let rows: Vec<Row> = tokens
+        .iter()
+        .map(|t| build_token_row(t, usages.get(&t.id)))
+        .collect();
     let widths = [
-        Constraint::Length(5),
-        Constraint::Length(16),
-        Constraint::Length(14),
-        Constraint::Min(20),
+        Constraint::Length(4),
+        Constraint::Length(12),
+        Constraint::Length(12),
+        Constraint::Length(7),
+        Constraint::Length(9),
+        Constraint::Length(9),
+        Constraint::Length(10),
+        Constraint::Length(9),
+        Constraint::Min(12),
     ];
 
     let table = Table::new(rows, widths).header(header).block(
         Block::default()
-            .title(" Registered Tokens ")
+            .title(" Registered Tokens & Account Usage ")
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded),
     );

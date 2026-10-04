@@ -1,4 +1,4 @@
-use crate::domain::usage::{DailyUsage, ModelUsage, UsageFilter, UsageSummary};
+use crate::domain::usage::{DailyUsage, ModelUsage, TokenUsage, UsageFilter, UsageSummary};
 use anyhow::{Context, Result};
 use rusqlite::params;
 use tokio_rusqlite::Connection;
@@ -224,4 +224,37 @@ pub async fn get_filtered_model_breakdown(
     })
     .await
     .context("Failed fetching model breakdown")
+}
+
+pub async fn get_token_usages(conn: &Connection) -> Result<Vec<TokenUsage>> {
+    conn.call(move |c| {
+        let query = "SELECT token_id, COUNT(*), COALESCE(SUM(prompt_tokens), 0), COALESCE(SUM(completion_tokens), 0), COALESCE(SUM(total_tokens), 0), COALESCE(SUM(cached_tokens), 0)
+                     FROM request_usage
+                     WHERE token_id IS NOT NULL
+                     GROUP BY token_id";
+        let mut stmt = c.prepare(query)?;
+        let rows = stmt.query_map([], |r| {
+            let tid: i64 = r.get(0)?;
+            let reqs: i64 = r.get(1)?;
+            let p: i64 = r.get(2)?;
+            let comp: i64 = r.get(3)?;
+            let tot: i64 = r.get(4)?;
+            let ca: i64 = r.get(5)?;
+            Ok(TokenUsage {
+                token_id: tid,
+                requests: reqs as u64,
+                prompt_tokens: p as u64,
+                completion_tokens: comp as u64,
+                total_tokens: tot as u64,
+                cached_tokens: ca as u64,
+            })
+        })?;
+        let mut list = Vec::new();
+        for item in rows {
+            list.push(item?);
+        }
+        Ok(list)
+    })
+    .await
+    .context("Failed fetching token usage breakdown")
 }

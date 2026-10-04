@@ -62,6 +62,20 @@ async fn test_db_usage_recording_and_summaries() {
     assert_eq!(models[0].total_tokens, 3000);
     assert_eq!(models[1].model, "deepseek-chat");
     assert_eq!(models[1].total_tokens, 1300);
+
+    let token_usages = deeperseeker::infra::usage_db::get_token_usages(&conn).await.unwrap();
+    assert_eq!(token_usages.len(), 2);
+    let t1 = token_usages.iter().find(|u| u.token_id == 1).unwrap();
+    assert_eq!(t1.requests, 2);
+    assert_eq!(t1.prompt_tokens, 500);
+    assert_eq!(t1.completion_tokens, 800);
+    assert_eq!(t1.total_tokens, 1300);
+    assert_eq!(t1.cached_tokens, 350);
+    assert!((t1.cache_hit_rate() - 70.0).abs() < 0.1);
+
+    let t2 = token_usages.iter().find(|u| u.token_id == 2).unwrap();
+    assert_eq!(t2.requests, 1);
+    assert_eq!(t2.total_tokens, 3000);
 }
 
 #[tokio::test]
@@ -132,11 +146,20 @@ fn test_dashboard_template_metrics_rendering() {
         raw_completion_tokens: 84,
         raw_total_tokens: 44_934,
     }];
+    let tokens = vec![deeperseeker::api::dashboard::DashboardTokenView {
+        id: 1,
+        alias: Some("account_alpha".to_string()),
+        masked: "user...9999".to_string(),
+        status: "ACTIVE".to_string(),
+        requests: "12".to_string(),
+        prompt_tokens: "34.5K".to_string(),
+        completion_tokens: "1.2K".to_string(),
+        total_tokens: "35.7K".to_string(),
+        cached_tokens: "20.0K".to_string(),
+        cache_rate: "58.0%".to_string(),
+    }];
     ctx.insert("summaries", &summaries);
-    ctx.insert(
-        "tokens",
-        &Vec::<deeperseeker::api::dashboard::DashboardTokenView>::new(),
-    );
+    ctx.insert("tokens", &tokens);
     ctx.insert("active_count", &1);
     ctx.insert("total_tokens_count", &1);
     ctx.insert("in_flight", &0);
@@ -153,4 +176,9 @@ fn test_dashboard_template_metrics_rendering() {
     assert!(rendered.contains("title=\"44850 tokens\""));
     assert!(rendered.contains("title=\"84 tokens\""));
     assert!(rendered.contains("title=\"15 requests\""));
+    assert!(rendered.contains("#1"));
+    assert!(rendered.contains("account_alpha"));
+    assert!(rendered.contains("35.7K"));
+    assert!(rendered.contains("58.0%"));
+    assert!(rendered.contains("user...9999"));
 }

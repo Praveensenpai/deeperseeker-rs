@@ -1,5 +1,6 @@
 use crate::api::state::AppState;
-use crate::domain::usage::format_metric;
+use crate::domain::token::Token;
+use crate::domain::usage::{format_metric, TokenUsage};
 use crate::infra::db::{add_token as db_add_token, delete_token as db_delete_token, get_tokens};
 use axum::{
     extract::{Form, Path, State},
@@ -11,6 +12,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use tera::Context;
 
 #[derive(Deserialize)]
@@ -31,6 +33,12 @@ pub struct DashboardTokenView {
     pub alias: Option<String>,
     pub masked: String,
     pub status: String,
+    pub requests: String,
+    pub prompt_tokens: String,
+    pub completion_tokens: String,
+    pub total_tokens: String,
+    pub cached_tokens: String,
+    pub cache_rate: String,
 }
 
 #[derive(Serialize)]
@@ -58,7 +66,8 @@ pub async fn show_login(State(state): State<AppState>) -> Response {
 pub async fn submit_login(State(state): State<AppState>, Form(form): Form<LoginForm>) -> Response {
     if form.username == state.config.admin_user && form.password == state.config.admin_pass {
         let auth_val = auth_hash(&state.config.admin_user, &state.config.session_secret);
-        let cookie_val = format!("session={auth_val}; Path=/; HttpOnly; SameSite=Lax");
+        let cookie_val =
+            format!("session={auth_val}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax");
         let mut resp = Redirect::to("/dashboard").into_response();
         resp.headers_mut().insert(
             SET_COOKIE,
@@ -95,19 +104,14 @@ pub async fn show_dashboard(State(state): State<AppState>, headers: HeaderMap) -
     let summaries = crate::infra::usage_db::get_all_summaries(&state.db)
         .await
         .unwrap_or_default();
+    let token_usages = crate::infra::usage_db::get_token_usages(&state.db)
+        .await
+        .unwrap_or_default();
     let active_count = tokens.iter().filter(|t| t.is_active()).count();
     let in_flight_map = state.in_flight.lock().await;
     let in_flight_count: usize = in_flight_map.values().sum();
 
-    let views: Vec<DashboardTokenView> = tokens
-        .into_iter()
-        .map(|tok| DashboardTokenView {
-            id: tok.id,
-            masked: tok.masked_token(),
-            alias: tok.alias,
-            status: tok.status,
-        })
-        .collect();
+    let views = build_token_views(tokens, &token_usages);
     let today_sum = summaries.iter().find(|s| s.period == "Today");
     let (cache_hit_rate, today_cached) = match today_sum {
         Some(t) => (
@@ -154,6 +158,46 @@ fn map_summary_views(
             raw_completion_tokens: s.completion_tokens,
             raw_total_tokens: s.total_tokens,
             raw_cached_tokens: s.cached_tokens,
+        })
+        .collect()
+}
+
+fn build_token_views(tokens: Vec<Token>, usages: &[TokenUsage]) -> Vec<DashboardTokenView> {
+    let usage_map: HashMap<i64, &TokenUsage> = usages.iter().map(|u| (u.token_id, u)).collect();
+    tokens
+        .into_iter()
+        .map(|tok| {
+            let usage = usage_map.get(&tok.id).copied();
+            let (reqs, p, c, tot, ca, rate) = match usage {
+                Some(u) => (
+                    format_metric(u.requests, false),
+                    format_metric(u.prompt_tokens, false),
+                    format_metric(u.completion_tokens, false),
+                    format_metric(u.total_tokens, false),
+                    format_metric(u.cached_tokens, false),
+                    format!("{:.1}%", u.cache_hit_rate()),
+                ),
+                None => (
+                    "0".to_string(),
+                    "0".to_string(),
+                    "0".to_string(),
+                    "0".to_string(),
+                    "0".to_string(),
+                    "0.0%".to_string(),
+                ),
+            };
+            DashboardTokenView {
+                id: tok.id,
+                masked: tok.masked_token(),
+                alias: tok.alias,
+                status: tok.status,
+                requests: reqs,
+                prompt_tokens: p,
+                completion_tokens: c,
+                total_tokens: tot,
+                cached_tokens: ca,
+                cache_rate: rate,
+            }
         })
         .collect()
 }

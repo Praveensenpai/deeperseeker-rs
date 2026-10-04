@@ -1,5 +1,5 @@
 use crate::domain::token::Token;
-use crate::domain::usage::UsageSummary;
+use crate::domain::usage::{TokenUsage, UsageSummary};
 use crate::tui::tabs::{
     render_diagnostics_tab, render_monitor_tab, render_tokens_tab, render_usage_tab,
 };
@@ -10,6 +10,7 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Paragraph},
     Frame,
 };
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActiveTab {
@@ -37,6 +38,7 @@ pub struct RenderState<'a> {
     pub active_tab: ActiveTab,
     pub tokens: &'a [Token],
     pub summaries: &'a [UsageSummary],
+    pub token_usages: &'a HashMap<i64, TokenUsage>,
     pub active_count: usize,
     pub in_flight_count: usize,
     pub pow_latency_ms: f64,

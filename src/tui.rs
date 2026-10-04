@@ -1,8 +1,8 @@
 use crate::domain::token::Token;
-use crate::domain::usage::{format_metric, UsageSummary};
+use crate::domain::usage::{format_metric, TokenUsage, UsageSummary};
 use crate::infra::db::{get_tokens, open_db};
 use crate::infra::pow::PowSolver;
-use crate::infra::usage_db::get_all_summaries;
+use crate::infra::usage_db::{get_all_summaries, get_token_usages};
 use crate::tui::views::{render_ui, ActiveTab, RenderState};
 use anyhow::{Context, Result};
 use crossterm::{
@@ -12,6 +12,7 @@ use crossterm::{
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 use serde_json::Value;
+use std::collections::HashMap;
 use std::io::{stdout, IsTerminal};
 use std::time::{Duration, Instant};
 
@@ -23,6 +24,7 @@ pub struct TuiData {
     pub server_version: String,
     pub tokens: Vec<Token>,
     pub summaries: Vec<UsageSummary>,
+    pub token_usages: HashMap<i64, TokenUsage>,
     pub in_flight: usize,
     pub pow_latency_ms: f64,
 }
@@ -58,6 +60,17 @@ pub async fn render_plain_status(server_url: &str, db_path: &str) -> Result<()> 
         active_count,
         data.tokens.len() - active_count
     );
+    for t in &data.tokens {
+        let alias = t.alias.as_deref().unwrap_or("-");
+        let (reqs, tokens_str) = match data.token_usages.get(&t.id) {
+            Some(u) => (u.requests, format_metric(u.total_tokens, false)),
+            None => (0, "0".to_string()),
+        };
+        println!(
+            "  - #{:<2} {:<12} {:<10} {} req(s) | {} total tokens",
+            t.id, alias, t.status, reqs, tokens_str
+        );
+    }
     if let Some(today) = data.summaries.iter().find(|s| s.period == "Today") {
         println!(
             "Today:       {} req(s) | {} total tokens",
@@ -104,13 +117,16 @@ async fn query_server_health(server_url: &str) -> (bool, String, usize) {
 async fn fetch_status_data(server_url: &str, db_path: &str) -> TuiData {
     let (online, version, in_flight) = query_server_health(server_url).await;
 
-    let (tokens, summaries) = match open_db(db_path).await {
+    let (tokens, summaries, token_usages) = match open_db(db_path).await {
         Ok(conn) => {
             let toks = get_tokens(&conn).await.unwrap_or_default();
             let sums = get_all_summaries(&conn).await.unwrap_or_default();
-            (toks, sums)
+            let usages = get_token_usages(&conn).await.unwrap_or_default();
+            let u_map: HashMap<i64, TokenUsage> =
+                usages.into_iter().map(|u| (u.token_id, u)).collect();
+            (toks, sums, u_map)
         }
-        Err(_) => (Vec::new(), Vec::new()),
+        Err(_) => (Vec::new(), Vec::new(), HashMap::new()),
     };
 
     let pow_latency_ms = measure_pow_latency();
@@ -120,6 +136,7 @@ async fn fetch_status_data(server_url: &str, db_path: &str) -> TuiData {
         server_version: version,
         tokens,
         summaries,
+        token_usages,
         in_flight,
         pow_latency_ms,
     }
@@ -220,6 +237,7 @@ async fn tui_loop<B: ratatui::backend::Backend>(
             active_tab,
             tokens: &data.tokens,
             summaries: &data.summaries,
+            token_usages: &data.token_usages,
             active_count,
             in_flight_count: data.in_flight,
             pow_latency_ms: data.pow_latency_ms,
