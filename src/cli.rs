@@ -3,6 +3,7 @@ use clap::{Args, Parser, Subcommand};
 pub mod diagnostic;
 pub mod service;
 pub mod token_cmd;
+pub mod update;
 pub mod usage_cmd;
 
 #[derive(Parser, Debug)]
@@ -32,6 +33,8 @@ pub enum Commands {
     Test(TestArgs),
     /// Manage systemd user service (Linux)
     Service(ServiceArgs),
+    /// Download and install the latest release binary from GitHub
+    Update(UpdateArgs),
 }
 
 #[derive(Args, Debug, Default)]
@@ -152,4 +155,11 @@ pub struct UsageArgs {
     /// Filter analytics by token alias or numeric ID
     #[arg(short = 't', long)]
     pub token: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct UpdateArgs {
+    /// Skip confirmation prompt and apply update immediately
+    #[arg(short = 'y', long)]
+    pub yes: bool,
 }

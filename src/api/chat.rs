@@ -257,7 +257,13 @@ async fn run_chat_request(
             resp,
         )
         .await
-        .map_err(|(sc, msg)| AttemptError::Fatal(sc, msg))
+        .map_err(|(sc, msg)| {
+            if sc == StatusCode::TOO_MANY_REQUESTS {
+                AttemptError::RateLimited(prep.token.id)
+            } else {
+                AttemptError::Fatal(sc, msg)
+            }
+        })
     }
 }
 

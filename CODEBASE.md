@@ -49,8 +49,8 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn current_timestamp () -> u64
   ```
 
-### `src/api/chat_stream.rs` (Role: api, Lines: 464)
-- **Responsibility**: Core api logic in src/api/chat_stream.rs
+### `src/api/chat_stream.rs` (Role: api, Lines: ~465)
+- **Responsibility**: Streaming and unary response handling. Empty completions (upstream throttle) are treated as rate-limit: token is marked limited, excluded, and the outer retry loop picks the next account.
 - **Imports**: use crate :: api :: chat_chunks :: { build_chat_response , build_terminal_chunk , create_openai_chunks , current_timestamp , make_reasoning_chunk , make_text_chunk , make_tool_calls_chunk , ChatResponseArgs , } , use crate :: api :: state :: AppState , use crate :: domain :: openai :: ChatMessage , use crate :: domain :: session :: { compute_next_signature , next_parent_id , Session } , use crate :: infra :: db :: save_session , use crate :: infra :: dsml :: { find_dsml_block_start , parse_dsml , safe_unambiguous_len , ParsedDsml } , pub use crate :: infra :: sse :: { drain_sse_lines , extract_chunks_from_event , parse_sse_line , ExtractedChunk , SseLineResult , } , use crate :: infra :: usage_db :: record_usage , use axum :: { body :: Body , http :: { header :: CONTENT_TYPE , StatusCode } , response :: { IntoResponse , Response } , Json , } , use futures :: StreamExt , use uuid :: Uuid 
 - **Public Functions & Signatures**:
   ```rust
@@ -173,6 +173,13 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn add_token (token : & str , alias : Option < & str > , db_path : & str) -> Result < () >
   async fn remove_token (token_id : i64 , db_path : & str) -> Result < () >
   async fn test_tokens (target_id : Option < i64 > , db_path : & str) -> Result < () >
+  ```
+
+### `src/cli/update.rs` (Role: cli, Lines: ~160)
+- **Responsibility**: Self-update command. Detects arch, fetches latest GitHub release via API, downloads tarball, extracts binary, replaces in-place, optionally restarts systemd user service.
+- **Public Functions & Signatures**:
+  ```rust
+  pub async fn run_update (yes : bool) -> Result < () >
   ```
 
 ### `src/cli/usage_cmd.rs` (Role: cli, Lines: 180)

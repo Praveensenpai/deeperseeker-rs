@@ -8,6 +8,7 @@ use deeperseeker::cli::token_cmd::{add_token, list_tokens, remove_token, test_to
 use deeperseeker::cli::usage_cmd::display_usage;
 use deeperseeker::cli::{
     Cli, Commands, ServeArgs, ServiceArgs, ServiceSubcommands, TokenArgs, TokenSubcommands,
+    UpdateArgs,
 };
 use deeperseeker::config::AppConfig;
 use deeperseeker::infra::db::{init_db, open_db};
@@ -51,6 +52,7 @@ async fn main() -> Result<()> {
             run_diagnostics(&db_path, &wasm_path, Some(&args.url)).await
         }
         Some(Commands::Service(args)) => handle_service(args),
+        Some(Commands::Update(args)) => handle_update(args).await,
     }
 }
 
@@ -81,6 +83,10 @@ fn handle_service(args: ServiceArgs) -> Result<()> {
         ServiceSubcommands::Uninstall => uninstall_user_service(),
         ServiceSubcommands::Status => service_status(),
     }
+}
+
+async fn handle_update(args: UpdateArgs) -> Result<()> {
+    deeperseeker::cli::update::run_update(args.yes).await
 }
 
 fn apply_serve_args(config: &mut AppConfig, args: &ServeArgs) {

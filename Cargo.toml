@@ -1,6 +1,6 @@
 [package]
 name = "deeperseeker"
-version = "0.2.23"
+version = "0.2.24"
 edition = "2021"
 description = "High-performance DeepSeek Web reverse proxy in Rust, based on DeeperSeeker by AmanCode22"
 repository = "https://github.com/Praveensenpai/deeperseeker-rs"
@@ -76,4 +76,6 @@ dirs = "5.0"
 
 # WASM for PoW solver
 wasmtime = "28"
+flate2 = "1.1.10"
+tar = "0.4.46"
 

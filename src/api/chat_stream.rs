@@ -118,11 +118,8 @@ pub async fn handle_streaming_response(
                 tracing::warn!("Retrying with fresh session after {wait_ms}ms...");
                 let _ = crate::infra::db::delete_sessions_for_chat(&db, cur_tok, &cur_sess).await;
 
-                let mut exclude = Vec::new();
-                if stream_state.upstream_error.is_some() {
-                    let _ = crate::infra::db::mark_limited(&db, cur_tok, state.config.cookie_cooldown).await;
-                    exclude.push(cur_tok);
-                }
+                let _ = crate::infra::db::mark_limited(&db, cur_tok, state.config.cookie_cooldown).await;
+                let exclude = vec![cur_tok];
 
                 tokio::time::sleep(std::time::Duration::from_millis(wait_ms)).await;
 
@@ -349,7 +346,7 @@ pub async fn handle_unary_response(
     if raw_content.is_empty() && parsed.tool_calls.is_empty() {
         let _ = crate::infra::db::delete_sessions_for_chat(&state.db, token_id, &session_id).await;
         return Err((
-            StatusCode::BAD_GATEWAY,
+            StatusCode::TOO_MANY_REQUESTS,
             "DeepSeek returned empty completion".to_string(),
         ));
     }
