@@ -75,6 +75,21 @@ docker run -d \
   ghcr.io/praveensenpai/deeperseeker-rs:latest
 ```
 
+#### 🔄 Updating the Container
+
+To upgrade an existing container to the latest release while keeping your database, tokens, and usage history intact:
+
+```bash
+docker rm -f deeperseeker && \
+docker pull ghcr.io/praveensenpai/deeperseeker-rs:latest && \
+docker run -d \
+  --name deeperseeker \
+  -p 4000:4000 \
+  -v deeperseeker_data:/data \
+  --restart unless-stopped \
+  ghcr.io/praveensenpai/deeperseeker-rs:latest
+```
+
 All credentials and options can be configured via environment variables (`DEEPSEEKER_API_KEY`, `DEEPSEEKER_ADMIN_PASS`, `DEEPSEEKER_REQUEST_GAP`).
 
 ---
@@ -186,6 +201,7 @@ Inspired by high-performance developer tooling (`sys-chronicle`, Claude CLI, `uv
 | `deeperseeker test` | Execute 4-tier diagnostics: SQLite DB, WASM PoW solver, DeepSeek API, Proxy |
 | `deeperseeker service install` | Generate and enable a systemd user service (`deeperseeker.service`) |
 | `deeperseeker service status` | Query systemd service status |
+| `deeperseeker update` | Download and install the latest release binary from GitHub |
 
 ### Interactive TUI Dashboard (`deeperseeker status`)
 
