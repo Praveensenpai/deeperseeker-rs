@@ -244,12 +244,12 @@ pub fn render_tokens_table(
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
         ),
-        Cell::from("Prompt").style(
+        Cell::from("Input").style(
             Style::default()
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
         ),
-        Cell::from("Compl").style(
+        Cell::from("Output").style(
             Style::default()
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),

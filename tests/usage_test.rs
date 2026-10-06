@@ -122,17 +122,8 @@ async fn test_filtered_usage_queries() {
     assert_eq!(token2_today.total_tokens, 3000);
 }
 
-#[test]
-fn test_dashboard_template_metrics_rendering() {
-    let mut tera = tera::Tera::default();
-    let template_content = std::fs::read_to_string("templates/dashboard.html").unwrap();
-    let base_content = std::fs::read_to_string("templates/base.html").unwrap();
-    tera.add_raw_template("base.html", &base_content).unwrap();
-    tera.add_raw_template("dashboard.html", &template_content)
-        .unwrap();
-
-    let mut ctx = tera::Context::new();
-    let summaries = vec![deeperseeker::api::dashboard::DashboardSummaryView {
+fn sample_summary_view() -> deeperseeker::api::dashboard::DashboardSummaryView {
+    deeperseeker::api::dashboard::DashboardSummaryView {
         period: "Today".to_string(),
         requests: "15".to_string(),
         prompt_tokens: "44.9K".to_string(),
@@ -145,21 +136,37 @@ fn test_dashboard_template_metrics_rendering() {
         raw_cached_tokens: 40_000,
         raw_completion_tokens: 84,
         raw_total_tokens: 44_934,
-    }];
-    let tokens = vec![deeperseeker::api::dashboard::DashboardTokenView {
+    }
+}
+
+fn sample_token_view() -> deeperseeker::api::dashboard::DashboardTokenView {
+    deeperseeker::api::dashboard::DashboardTokenView {
         id: 1,
         alias: Some("account_alpha".to_string()),
         masked: "user...9999".to_string(),
         status: "ACTIVE".to_string(),
+        last_used_ago: "2m ago".to_string(),
+        last_used_title: "2026-10-06 11:30:00 UTC".to_string(),
         requests: "12".to_string(),
         prompt_tokens: "34.5K".to_string(),
         completion_tokens: "1.2K".to_string(),
         total_tokens: "35.7K".to_string(),
         cached_tokens: "20.0K".to_string(),
         cache_rate: "58.0%".to_string(),
-    }];
-    ctx.insert("summaries", &summaries);
-    ctx.insert("tokens", &tokens);
+    }
+}
+
+#[test]
+fn test_dashboard_template_metrics_rendering() {
+    let mut tera = tera::Tera::default();
+    let template_content = std::fs::read_to_string("templates/dashboard.html").unwrap();
+    let base_content = std::fs::read_to_string("templates/base.html").unwrap();
+    tera.add_raw_template("base.html", &base_content).unwrap();
+    tera.add_raw_template("dashboard.html", &template_content).unwrap();
+
+    let mut ctx = tera::Context::new();
+    ctx.insert("summaries", &[sample_summary_view()]);
+    ctx.insert("tokens", &[sample_token_view()]);
     ctx.insert("active_count", &1);
     ctx.insert("total_tokens_count", &1);
     ctx.insert("in_flight", &0);
@@ -181,4 +188,8 @@ fn test_dashboard_template_metrics_rendering() {
     assert!(rendered.contains("35.7K"));
     assert!(rendered.contains("58.0%"));
     assert!(rendered.contains("user...9999"));
+    assert!(rendered.contains("2m ago"));
+    assert!(rendered.contains("<th>Last Used</th>"));
+    assert!(rendered.contains("<th>Input</th>"));
+    assert!(rendered.contains("<th>Output</th>"));
 }

@@ -1,7 +1,9 @@
 use crate::api::state::AppState;
 use crate::domain::token::Token;
 use crate::domain::usage::{format_metric, TokenUsage};
-use crate::infra::db::{add_token as db_add_token, delete_token as db_delete_token, get_tokens};
+use crate::infra::db::{
+    add_token as db_add_token, delete_token as db_delete_token, get_tokens, now_timestamp,
+};
 use axum::{
     extract::{Form, Path, State},
     http::{
@@ -33,6 +35,8 @@ pub struct DashboardTokenView {
     pub alias: Option<String>,
     pub masked: String,
     pub status: String,
+    pub last_used_ago: String,
+    pub last_used_title: String,
     pub requests: String,
     pub prompt_tokens: String,
     pub completion_tokens: String,
@@ -162,11 +166,42 @@ fn map_summary_views(
         .collect()
 }
 
+fn format_timestamp_title(secs: i64) -> String {
+    let Ok(dt) = time::OffsetDateTime::from_unix_timestamp(secs) else {
+        return "Unknown".to_string();
+    };
+    let fmt = time::macros::format_description!(
+        "[year]-[month]-[day] [hour]:[minute]:[second] UTC"
+    );
+    dt.format(&fmt).unwrap_or_else(|_| "Unknown".to_string())
+}
+
+fn format_relative_time(ts: Option<f64>, now: f64) -> (String, String) {
+    let Some(t) = ts.filter(|&v| v > 0.0) else {
+        return ("Never".to_string(), "Never used".to_string());
+    };
+
+    let elapsed = (now - t).max(0.0);
+    let ago = if elapsed < 60.0 {
+        format!("{}s ago", elapsed as u64)
+    } else if elapsed < 3600.0 {
+        format!("{}m ago", (elapsed / 60.0).floor() as u64)
+    } else if elapsed < 86400.0 {
+        format!("{}h ago", (elapsed / 3600.0).floor() as u64)
+    } else {
+        format!("{}d ago", (elapsed / 86400.0).floor() as u64)
+    };
+
+    (ago, format_timestamp_title(t as i64))
+}
+
 fn build_token_views(tokens: Vec<Token>, usages: &[TokenUsage]) -> Vec<DashboardTokenView> {
+    let now = now_timestamp();
     let usage_map: HashMap<i64, &TokenUsage> = usages.iter().map(|u| (u.token_id, u)).collect();
     tokens
         .into_iter()
         .map(|tok| {
+            let (last_used_ago, last_used_title) = format_relative_time(tok.last_used, now);
             let usage = usage_map.get(&tok.id).copied();
             let (reqs, p, c, tot, ca, rate) = match usage {
                 Some(u) => (
@@ -191,6 +226,8 @@ fn build_token_views(tokens: Vec<Token>, usages: &[TokenUsage]) -> Vec<Dashboard
                 masked: tok.masked_token(),
                 alias: tok.alias,
                 status: tok.status,
+                last_used_ago,
+                last_used_title,
                 requests: reqs,
                 prompt_tokens: p,
                 completion_tokens: c,

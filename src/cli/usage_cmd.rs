@@ -90,7 +90,7 @@ fn render_summary_table(summaries: &[crate::domain::usage::UsageSummary], raw: b
     println!("├─────────────┬──────────┬──────────────┬──────────────┬──────────────┬───────────────────┤");
     println!(
         "│ {:<11} │ {:<8} │ {:<12} │ {:<12} │ {:<12} │ {:<17} │",
-        "Period", "Requests", "Prompt (In)", "Cached (Save)", "Compl (Out)", "Total Tokens"
+        "Period", "Requests", "Input (In)", "Cached (Save)", "Output (Out)", "Total Tokens"
     );
     println!("├─────────────┼──────────┼──────────────┼──────────────┼──────────────┼───────────────────┤");
 
