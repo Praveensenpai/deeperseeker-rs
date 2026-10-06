@@ -81,6 +81,69 @@ pub async fn remove_token(token_id: i64, db_path: &str) -> Result<()> {
     Ok(())
 }
 
+pub async fn edit_token(
+    token_id: i64,
+    new_token: Option<&str>,
+    alias: Option<&str>,
+    db_path: &str,
+) -> Result<()> {
+    let conn = open_db(db_path).await.context("Failed opening database")?;
+    init_db(&conn)
+        .await
+        .context("Failed initializing database")?;
+
+    let exists = get_tokens(&conn)
+        .await
+        .context("Failed retrieving tokens")?
+        .iter()
+        .any(|t| t.id == token_id);
+
+    if !exists {
+        anyhow::bail!("No token with ID #{token_id} found in database.");
+    }
+
+    let trimmed_alias = alias.map(str::trim).filter(|s| !s.is_empty());
+
+    let Some(candidate) = new_token.map(str::trim).filter(|s| !s.is_empty()) else {
+        crate::infra::db::update_token(&conn, token_id, None, trimmed_alias, None)
+            .await
+            .context("Failed to update alias")?;
+        println!("✔ Alias updated for token #{token_id}");
+        return Ok(());
+    };
+
+    let client = DeepSeekClient::new();
+    print!("Verifying new token for #{token_id} against upstream... ");
+    match client
+        .create_pow_challenge(candidate, "/api/v0/chat/completion")
+        .await
+    {
+        Ok(_) => {
+            crate::infra::db::update_token(
+                &conn,
+                token_id,
+                Some(candidate),
+                trimmed_alias,
+                Some("ACTIVE"),
+            )
+            .await
+            .context("Failed to update token")?;
+            println!("VALID");
+            println!("✔ Token #{token_id} updated and verified (ACTIVE)");
+            Ok(())
+        }
+        Err(e) => {
+            crate::infra::db::update_token(&conn, token_id, None, trimmed_alias, Some("EXPIRED"))
+                .await
+                .context("Failed to mark token expired")?;
+            println!("INVALID");
+            anyhow::bail!(
+                "New token rejected (verification failed): {e:#}. Existing token value was kept."
+            )
+        }
+    }
+}
+
 pub async fn test_tokens(target_id: Option<i64>, db_path: &str) -> Result<()> {
     let conn = open_db(db_path).await.context("Failed opening database")?;
     let tokens = get_tokens(&conn)

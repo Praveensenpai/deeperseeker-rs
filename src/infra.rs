@@ -3,6 +3,7 @@ pub mod db;
 pub mod deepseek_client;
 pub mod dsml;
 pub mod media;
+pub mod pacing;
 pub mod pow;
 pub mod prompt;
 pub mod rehome;

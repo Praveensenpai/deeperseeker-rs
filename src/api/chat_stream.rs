@@ -110,11 +110,19 @@ pub async fn handle_streaming_response(
             );
 
             if attempt < 3 {
-                let wait_ms = match attempt {
-                    0 => (state.config.request_gap * 1000.0) as u64,
-                    1 => (state.config.request_gap * 1500.0) as u64,
-                    _ => (state.config.request_gap * 2000.0) as u64,
+                let factor = match attempt {
+                    0 => 1.0,
+                    1 => 1.5,
+                    _ => 2.0,
                 };
+                let base = state.config.request_gap * factor;
+                let gap = crate::infra::pacing::effective_gap(
+                    base,
+                    state.config.request_gap_jitter,
+                    state.config.human_pause_chance,
+                    state.config.human_pause_max,
+                );
+                let wait_ms = (gap * 1000.0) as u64;
                 tracing::warn!("Retrying with fresh session after {wait_ms}ms...");
                 let _ = crate::infra::db::delete_sessions_for_chat(&db, cur_tok, &cur_sess).await;
 

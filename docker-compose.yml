@@ -15,7 +15,7 @@ services:
       - DEEPSEEKER_ADMIN_USER=admin
       - DEEPSEEKER_ADMIN_PASS=admin
       - DEEPSEEKER_DB_PATH=/data/deeperseeker.db
-      - DEEPSEEKER_REQUEST_GAP=2.5
+      - DEEPSEEKER_REQUEST_GAP=5.0
       - RUST_LOG=info
     volumes:
       - deeperseeker_data:/data

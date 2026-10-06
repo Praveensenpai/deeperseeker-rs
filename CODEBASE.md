@@ -23,7 +23,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn anthropic_messages (State (state) : State < AppState > , Json (req) : Json < AnthropicMessageRequest > ,) -> Result < Response , (StatusCode , Json < serde_json :: Value >) >
   ```
 
-### `src/api/chat.rs` (Role: api, Lines: 378)
+### `src/api/chat.rs` (Role: api, Lines: 382)
 - **Responsibility**: Core api logic in src/api/chat.rs
 - **Imports**: use crate :: api :: chat_stream :: { handle_streaming_response , handle_unary_response } , use crate :: api :: state :: AppState , use crate :: domain :: openai :: ChatCompletionRequest , use crate :: domain :: session :: compute_signature , use crate :: domain :: token :: Token , use crate :: domain :: upstream :: is_auth_failure , use crate :: infra :: db :: { find_session , mark_active , mark_expired , mark_limited , pick_token , touch_token , } , use crate :: infra :: deepseek_client :: CompletionArgs , use crate :: infra :: media :: { resolve_message_media , MediaContext } , use crate :: infra :: prompt :: build_prompt_for_turn , use axum :: { extract :: State , http :: StatusCode , response :: Response , Json } , use serde_json :: json 
 - **Public Functions & Signatures**:
@@ -49,7 +49,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn current_timestamp () -> u64
   ```
 
-### `src/api/chat_stream.rs` (Role: api, Lines: 461)
+### `src/api/chat_stream.rs` (Role: api, Lines: 469)
 - **Responsibility**: Core api logic in src/api/chat_stream.rs
 - **Imports**: use crate :: api :: chat_chunks :: { build_chat_response , build_terminal_chunk , create_openai_chunks , current_timestamp , make_reasoning_chunk , make_text_chunk , make_tool_calls_chunk , ChatResponseArgs , } , use crate :: api :: state :: AppState , use crate :: domain :: openai :: ChatMessage , use crate :: domain :: session :: { compute_next_signature , next_parent_id , Session } , use crate :: infra :: db :: save_session , use crate :: infra :: dsml :: { find_dsml_block_start , parse_dsml , safe_unambiguous_len , ParsedDsml } , pub use crate :: infra :: sse :: { drain_sse_lines , extract_chunks_from_event , parse_sse_line , ExtractedChunk , SseLineResult , } , use crate :: infra :: usage_db :: record_usage , use axum :: { body :: Body , http :: { header :: CONTENT_TYPE , StatusCode } , response :: { IntoResponse , Response } , Json , } , use futures :: StreamExt , use uuid :: Uuid 
 - **Public Functions & Signatures**:
@@ -58,13 +58,15 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn handle_unary_response (state : & AppState , model : String , token_id : i64 , session_id : String , parent_id : i64 , req_messages : & [ChatMessage] , upstream_resp : reqwest :: Response ,) -> Result < Response , (StatusCode , String) >
   ```
 
-### `src/api/dashboard.rs` (Role: api, Lines: 299)
+### `src/api/dashboard.rs` (Role: api, Lines: 420)
 - **Responsibility**: Core api logic in src/api/dashboard.rs
-- **Imports**: use crate :: api :: state :: AppState , use crate :: domain :: token :: Token , use crate :: domain :: usage :: { format_metric , TokenUsage } , use crate :: infra :: db :: { add_token as db_add_token , delete_token as db_delete_token , get_tokens , now_timestamp , } , use axum :: { extract :: { Form , Path , State } , http :: { header :: { COOKIE , SET_COOKIE } , HeaderMap , StatusCode , } , response :: { Html , IntoResponse , Redirect , Response } , } , use serde :: { Deserialize , Serialize } , use sha2 :: { Digest , Sha256 } , use std :: collections :: HashMap , use tera :: Context 
+- **Imports**: use crate :: api :: state :: AppState , use crate :: domain :: token :: Token , use crate :: domain :: usage :: { format_metric , TokenUsage } , use crate :: infra :: db :: { add_token as db_add_token , delete_token as db_delete_token , get_token as db_get_token , get_tokens , mark_active as db_mark_active , mark_expired as db_mark_expired , now_timestamp , update_token as db_update_token , } , use axum :: { extract :: { Form , Path , Query , State } , http :: { header :: { COOKIE , SET_COOKIE } , HeaderMap , StatusCode , } , response :: { Html , IntoResponse , Redirect , Response } , } , use serde :: { Deserialize , Serialize } , use sha2 :: { Digest , Sha256 } , use std :: collections :: HashMap , use tera :: Context 
 - **Types & Enums**:
   ```rust
   pub struct LoginForm
   pub struct AddTokenForm
+  pub struct EditTokenForm
+  pub struct MsgQuery
   pub struct DashboardTokenView
   pub struct DashboardSummaryView
   ```
@@ -73,9 +75,11 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn show_login (State (state) : State < AppState >) -> Response
   async fn submit_login (State (state) : State < AppState > , Form (form) : Form < LoginForm >) -> Response
   async fn logout () -> Response
-  async fn show_dashboard (State (state) : State < AppState > , headers : HeaderMap) -> Response
+  async fn show_dashboard (State (state) : State < AppState > , headers : HeaderMap , Query (query) : Query < MsgQuery > ,) -> Response
   async fn add_token (State (state) : State < AppState > , headers : HeaderMap , Form (form) : Form < AddTokenForm > ,) -> Response
   async fn delete_token (State (state) : State < AppState > , headers : HeaderMap , Path (token_id) : Path < i64 > ,) -> Response
+  async fn edit_token (State (state) : State < AppState > , headers : HeaderMap , Path (token_id) : Path < i64 > , Form (form) : Form < EditTokenForm > ,) -> Response
+  async fn verify_token (State (state) : State < AppState > , headers : HeaderMap , Path (token_id) : Path < i64 > ,) -> Response
   ```
 
 ### `src/api/files.rs` (Role: api, Lines: 124)
@@ -138,9 +142,9 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn get_usage_metrics (State (state) : State < AppState > , Query (query) : Query < UsageQuery > ,) -> impl IntoResponse
   ```
 
-### `src/api.rs` (Role: api, Lines: 62)
+### `src/api.rs` (Role: api, Lines: 65)
 - **Responsibility**: Core api logic in src/api.rs
-- **Imports**: use crate :: api :: anthropic :: anthropic_messages , use crate :: api :: chat :: chat_completions , use crate :: api :: dashboard :: { add_token , delete_token , logout , show_dashboard , show_login , submit_login , } , use crate :: api :: files :: { upload_file_anthropic , upload_file_openai } , use crate :: api :: health :: { health , root } , use crate :: api :: middleware :: require_api_key , use crate :: api :: models :: list_models , use crate :: api :: state :: AppState , use crate :: api :: usage :: get_usage_metrics , use axum :: { middleware :: from_fn_with_state , routing :: { get , post } , Router , } , use tower_http :: cors :: CorsLayer , use tower_http :: services :: ServeDir 
+- **Imports**: use crate :: api :: anthropic :: anthropic_messages , use crate :: api :: chat :: chat_completions , use crate :: api :: dashboard :: { add_token , delete_token , edit_token , logout , show_dashboard , show_login , submit_login , verify_token , } , use crate :: api :: files :: { upload_file_anthropic , upload_file_openai } , use crate :: api :: health :: { health , root } , use crate :: api :: middleware :: require_api_key , use crate :: api :: models :: list_models , use crate :: api :: state :: AppState , use crate :: api :: usage :: get_usage_metrics , use axum :: { middleware :: from_fn_with_state , routing :: { get , post } , Router , } , use tower_http :: cors :: CorsLayer , use tower_http :: services :: ServeDir 
 - **Public Functions & Signatures**:
   ```rust
   fn build_router (state : AppState) -> Router
@@ -164,7 +168,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn service_status () -> Result < () >
   ```
 
-### `src/cli/token_cmd.rs` (Role: cli, Lines: 148)
+### `src/cli/token_cmd.rs` (Role: cli, Lines: 211)
 - **Responsibility**: Core cli logic in src/cli/token_cmd.rs
 - **Imports**: use crate :: domain :: token :: Token , use crate :: infra :: db :: { add_token as db_add , delete_token , get_tokens , init_db , open_db } , use crate :: infra :: deepseek_client :: DeepSeekClient , use anyhow :: { Context , Result } , use std :: time :: Instant 
 - **Public Functions & Signatures**:
@@ -172,6 +176,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn list_tokens (db_path : & str) -> Result < () >
   async fn add_token (token : & str , alias : Option < & str > , db_path : & str) -> Result < () >
   async fn remove_token (token_id : i64 , db_path : & str) -> Result < () >
+  async fn edit_token (token_id : i64 , new_token : Option < & str > , alias : Option < & str > , db_path : & str ,) -> Result < () >
   async fn test_tokens (target_id : Option < i64 > , db_path : & str) -> Result < () >
   ```
 
@@ -195,7 +200,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn display_usage (args : UsageViewArgs) -> Result < () >
   ```
 
-### `src/cli.rs` (Role: cli, Lines: 165)
+### `src/cli.rs` (Role: cli, Lines: 178)
 - **Responsibility**: Core cli logic in src/cli.rs
 - **Imports**: use clap :: { Args , Parser , Subcommand } 
 - **Types & Enums**:
@@ -213,7 +218,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   pub struct UpdateArgs
   ```
 
-### `src/config.rs` (Role: general, Lines: 70)
+### `src/config.rs` (Role: general, Lines: 88)
 - **Responsibility**: Core general logic in src/config.rs
 - **Imports**: use std :: env 
 - **Types & Enums**:
@@ -363,7 +368,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn resolve_db_path (custom : Option < & str >) -> String
   ```
 
-### `src/infra/db.rs` (Role: infra, Lines: 378)
+### `src/infra/db.rs` (Role: infra, Lines: 434)
 - **Responsibility**: Core infra logic in src/infra/db.rs
 - **Imports**: use crate :: domain :: session :: Session , use crate :: domain :: token :: Token , use anyhow :: { Context , Result } , use rusqlite :: params , use std :: collections :: HashMap , use std :: time :: { SystemTime , UNIX_EPOCH } , use tokio_rusqlite :: Connection 
 - **Public Functions & Signatures**:
@@ -372,6 +377,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn open_db (path : & str) -> Result < Connection >
   async fn init_db (conn : & Connection) -> Result < () >
   async fn add_token (conn : & Connection , token : & str , alias : Option < & str >) -> Result < () >
+  async fn update_token (conn : & Connection , token_id : i64 , new_token : Option < & str > , alias : Option < & str > , status : Option < & str > ,) -> Result < () >
   async fn get_tokens (conn : & Connection) -> Result < Vec < Token > >
   async fn get_token (conn : & Connection , token_id : i64) -> Result < Option < Token > >
   async fn delete_token (conn : & Connection , token_id : i64) -> Result < () >
@@ -436,6 +442,15 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn resolve_message_media (ctx : & MediaContext < '_ > , messages : & [ChatMessage] ,) -> Result < Vec < String > >
   async fn parse_image_source (client : & DeepSeekClient , url : & str) -> Result < DecodedImage >
   fn detect_image_format (bytes : & [u8]) -> (& 'static str , & 'static str)
+  ```
+
+### `src/infra/pacing.rs` (Role: infra, Lines: 68)
+- **Responsibility**: Core infra logic in src/infra/pacing.rs
+- **Imports**: use rand :: Rng , use std :: time :: Duration 
+- **Public Functions & Signatures**:
+  ```rust
+  fn effective_gap (base : f64 , jitter : f64 , human_chance : f64 , human_max : f64) -> f64
+  async fn sleep_remainder (elapsed : f64 , target : f64)
   ```
 
 ### `src/infra/pow.rs` (Role: infra, Lines: 95)
@@ -509,15 +524,15 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn start_suspended_token_probe (conn : Connection , client : DeepSeekClient , interval : Duration ,) -> tokio :: task :: JoinHandle < () >
   ```
 
-### `src/infra.rs` (Role: infra, Lines: 11)
+### `src/infra.rs` (Role: infra, Lines: 12)
 - **Responsibility**: Core infra logic in src/infra.rs
 
 ### `src/lib.rs` (Role: general, Lines: 6)
 - **Responsibility**: Core general logic in src/lib.rs
 
-### `src/main.rs` (Role: general, Lines: 162)
+### `src/main.rs` (Role: general, Lines: 171)
 - **Responsibility**: Core general logic in src/main.rs
-- **Imports**: use anyhow :: { Context , Result } , use clap :: Parser , use deeperseeker :: api :: build_router , use deeperseeker :: api :: state :: AppState , use deeperseeker :: cli :: diagnostic :: run_diagnostics , use deeperseeker :: cli :: service :: { install_user_service , service_status , uninstall_user_service } , use deeperseeker :: cli :: token_cmd :: { add_token , list_tokens , remove_token , test_tokens } , use deeperseeker :: cli :: usage_cmd :: display_usage , use deeperseeker :: cli :: { Cli , Commands , ServeArgs , ServiceArgs , ServiceSubcommands , TokenArgs , TokenSubcommands , UpdateArgs , } , use deeperseeker :: config :: AppConfig , use deeperseeker :: infra :: db :: { init_db , open_db } , use deeperseeker :: infra :: deepseek_client :: DeepSeekClient , use deeperseeker :: infra :: pow :: PowSolver , use deeperseeker :: tui :: run_status , use std :: collections :: HashMap , use std :: sync :: Arc , use tera :: Tera , use tokio :: net :: TcpListener , use tokio :: sync :: Mutex , use tracing :: info 
+- **Imports**: use anyhow :: { Context , Result } , use clap :: Parser , use deeperseeker :: api :: build_router , use deeperseeker :: api :: state :: AppState , use deeperseeker :: cli :: diagnostic :: run_diagnostics , use deeperseeker :: cli :: service :: { install_user_service , service_status , uninstall_user_service } , use deeperseeker :: cli :: token_cmd :: { add_token , edit_token , list_tokens , remove_token , test_tokens } , use deeperseeker :: cli :: usage_cmd :: display_usage , use deeperseeker :: cli :: { Cli , Commands , ServeArgs , ServiceArgs , ServiceSubcommands , TokenArgs , TokenSubcommands , UpdateArgs , } , use deeperseeker :: config :: AppConfig , use deeperseeker :: infra :: db :: { init_db , open_db } , use deeperseeker :: infra :: deepseek_client :: DeepSeekClient , use deeperseeker :: infra :: pow :: PowSolver , use deeperseeker :: tui :: run_status , use std :: collections :: HashMap , use std :: sync :: Arc , use tera :: Tera , use tokio :: net :: TcpListener , use tokio :: sync :: Mutex , use tracing :: info 
 
 ### `src/tui/tabs.rs` (Role: tui, Lines: 343)
 - **Responsibility**: Core tui logic in src/tui/tabs.rs

@@ -96,6 +96,19 @@ pub enum TokenSubcommands {
         #[arg(short = 'd', long)]
         db: Option<String>,
     },
+    /// Edit a token's value and/or alias (new token is verified before saving)
+    Edit {
+        /// Token ID to edit
+        id: i64,
+        /// New token string (userToken from chat.deepseek.com)
+        #[arg(short = 't', long)]
+        token: Option<String>,
+        /// New human-readable alias
+        #[arg(short = 'a', long)]
+        alias: Option<String>,
+        #[arg(short = 'd', long)]
+        db: Option<String>,
+    },
     /// Test token validity against upstream DeepSeek API
     Test {
         /// Optional token ID to test (tests all if omitted)

@@ -2,6 +2,12 @@
 {% block title %}Dashboard — DeeperSeeker{% endblock %}
 {% block content %}
 
+{% if flash_msg %}
+<div class="flash-banner {% if flash_ok %}flash-ok{% else %}flash-err{% endif %}">
+    {{ flash_msg }}
+</div>
+{% endif %}
+
 <!-- Hero Metrics Grid -->
 <div class="metrics-grid">
     <div class="metric-card">
@@ -134,8 +140,12 @@
                     <td>
                         <code style="font-family: var(--font-mono); font-size: 0.8rem;">{{ tok.masked }}</code>
                     </td>
-                    <td style="text-align: right;">
-                        <form method="post" action="/tokens/{{ tok.id }}/delete" style="display:inline" onsubmit="return confirm('Delete token #{{ tok.id }}?')">
+                    <td style="text-align: right; white-space: nowrap;">
+                        <button type="button" class="btn-ghost" data-id="{{ tok.id }}" data-alias="{{ tok.alias | default(value="") }}" onclick="openEdit(this)">Edit</button>
+                        <form method="post" action="/tokens/{{ tok.id }}/verify" style="display:inline">
+                            <button type="submit" class="btn-ghost">Verify</button>
+                        </form>
+                        <form method="post" action="/tokens/{{ tok.id }}/delete" style="display:inline" onsubmit="return confirm('Delete token #{{ tok.id }}? Its usage history will also be removed.')">
                             <button type="submit" class="btn-danger-outline">Delete</button>
                         </form>
                     </td>
@@ -198,6 +208,54 @@
             input.value = input.value.trim().replace(/^['"]|['"]$/g, "");
         }
     }
+
+    function openEdit(btn) {
+        const id = btn.getAttribute("data-id");
+        const alias = btn.getAttribute("data-alias") || "";
+        document.getElementById("edit-token-id").textContent = "#" + id;
+        document.getElementById("edit-alias").value = alias;
+        document.getElementById("edit-token").value = "";
+        document.getElementById("edit-form").action = "/tokens/" + id + "/edit";
+        document.getElementById("edit-modal").style.display = "flex";
+    }
+
+    function closeEdit() {
+        document.getElementById("edit-modal").style.display = "none";
+    }
+
+    function cleanEditToken(form) {
+        const input = document.getElementById("edit-token");
+        if (input && input.value) {
+            input.value = input.value.trim().replace(/^['"]|['"]$/g, "");
+        }
+    }
+
+    document.getElementById("edit-modal").addEventListener("click", function (e) {
+        if (e.target === this) closeEdit();
+    });
 </script>
+
+<!-- Edit Token Modal -->
+<div id="edit-modal" class="modal-overlay" style="display: none;">
+    <div class="modal">
+        <div class="modal-header">
+            <h3 class="modal-title">Edit Token <span id="edit-token-id"></span></h3>
+            <button type="button" class="modal-close" onclick="closeEdit()">&times;</button>
+        </div>
+        <form method="post" id="edit-form" onsubmit="cleanEditToken(this)">
+            <div class="modal-body">
+                <label class="modal-label">Alias</label>
+                <input type="text" id="edit-alias" name="alias" class="input-field" placeholder="Alias" style="width: 100%;">
+                <label class="modal-label">New Token <span style="color: var(--text-muted); font-weight: 400;">(leave blank to keep current)</span></label>
+                <input type="text" id="edit-token" name="auth_token" class="input-field" placeholder="Paste new userToken (verified before saving)..." style="width: 100%;">
+                <p class="modal-hint">A new token is validated against DeepSeek upstream first. If it fails, it is rejected and the existing token is kept.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-ghost" onclick="closeEdit()">Cancel</button>
+                <button type="submit" class="btn-primary">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
 
 {% endblock %}

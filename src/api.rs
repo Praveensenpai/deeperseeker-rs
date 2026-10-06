@@ -13,7 +13,8 @@ pub mod usage;
 use crate::api::anthropic::anthropic_messages;
 use crate::api::chat::chat_completions;
 use crate::api::dashboard::{
-    add_token, delete_token, logout, show_dashboard, show_login, submit_login,
+    add_token, delete_token, edit_token, logout, show_dashboard, show_login, submit_login,
+    verify_token,
 };
 use crate::api::files::{upload_file_anthropic, upload_file_openai};
 use crate::api::health::{health, root};
@@ -48,6 +49,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/logout", get(logout))
         .route("/dashboard", get(show_dashboard))
         .route("/tokens/add", post(add_token))
+        .route("/tokens/{token_id}/edit", post(edit_token))
+        .route("/tokens/{token_id}/verify", post(verify_token))
         .route("/tokens/{token_id}/delete", post(delete_token));
 
     Router::new()

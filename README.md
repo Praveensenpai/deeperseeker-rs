@@ -90,7 +90,7 @@ docker run -d \
   ghcr.io/praveensenpai/deeperseeker-rs:latest
 ```
 
-All credentials and options can be configured via environment variables (`DEEPSEEKER_API_KEY`, `DEEPSEEKER_ADMIN_PASS`, `DEEPSEEKER_REQUEST_GAP`).
+All credentials and options can be configured via environment variables (`DEEPSEEKER_API_KEY`, `DEEPSEEKER_ADMIN_PASS`, `DEEPSEEKER_REQUEST_GAP`). Request pacing is human-like by default: a 5s base gap with jitter, plus an occasional reading pause (`DEEPSEEKER_REQUEST_GAP_JITTER`, `DEEPSEEKER_HUMAN_PAUSE_CHANCE`, `DEEPSEEKER_HUMAN_PAUSE_MAX`).
 
 ---
 

@@ -71,11 +71,14 @@ pub(crate) struct PreparedSession {
 async fn pace_token_request(state: &AppState, last_used: Option<f64>) {
     if let Some(last) = last_used {
         let elapsed = crate::infra::db::now_timestamp() - last;
-        let gap = state.config.request_gap;
-        if elapsed < gap && elapsed >= 0.0 {
-            let sleep_ms = ((gap - elapsed) * 1000.0) as u64;
-            tokio::time::sleep(std::time::Duration::from_millis(sleep_ms)).await;
-        }
+        let cfg = &state.config;
+        let target = crate::infra::pacing::effective_gap(
+            cfg.request_gap,
+            cfg.request_gap_jitter,
+            cfg.human_pause_chance,
+            cfg.human_pause_max,
+        );
+        crate::infra::pacing::sleep_remainder(elapsed, target).await;
     }
 }
 
@@ -200,13 +203,14 @@ async fn try_resume_session(
     }
 
     let elapsed = crate::infra::db::now_timestamp() - sess.last_used;
-    let gap = state.config.request_gap;
-    if elapsed < gap && elapsed >= 0.0 {
-        tokio::time::sleep(std::time::Duration::from_millis(
-            ((gap - elapsed) * 1000.0) as u64,
-        ))
-        .await;
-    }
+    let cfg = &state.config;
+    let target = crate::infra::pacing::effective_gap(
+        cfg.request_gap,
+        cfg.request_gap_jitter,
+        cfg.human_pause_chance,
+        cfg.human_pause_max,
+    );
+    crate::infra::pacing::sleep_remainder(elapsed, target).await;
 
     tracing::info!(
         "Resumed session {} (parent: {}) for sig {}",

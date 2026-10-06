@@ -13,6 +13,9 @@ pub struct AppConfig {
     pub token_concurrency: usize,
     pub cookie_cooldown: u64,
     pub request_gap: f64,
+    pub request_gap_jitter: f64,
+    pub human_pause_chance: f64,
+    pub human_pause_max: f64,
     pub suspend_probe_interval_secs: u64,
 }
 
@@ -45,7 +48,19 @@ impl AppConfig {
         let request_gap = env::var("DEEPSEEKER_REQUEST_GAP")
             .ok()
             .and_then(|g| g.parse().ok())
-            .unwrap_or(2.5);
+            .unwrap_or(5.0);
+        let request_gap_jitter = env::var("DEEPSEEKER_REQUEST_GAP_JITTER")
+            .ok()
+            .and_then(|g| g.parse().ok())
+            .unwrap_or(0.75);
+        let human_pause_chance = env::var("DEEPSEEKER_HUMAN_PAUSE_CHANCE")
+            .ok()
+            .and_then(|g| g.parse().ok())
+            .unwrap_or(0.12);
+        let human_pause_max = env::var("DEEPSEEKER_HUMAN_PAUSE_MAX")
+            .ok()
+            .and_then(|g| g.parse().ok())
+            .unwrap_or(6.0);
         let suspend_probe_interval_secs = env::var("DEEPSEEKER_SUSPEND_PROBE_INTERVAL_HOURS")
             .ok()
             .and_then(|h| h.parse::<u64>().ok())
@@ -64,6 +79,9 @@ impl AppConfig {
             token_concurrency,
             cookie_cooldown,
             request_gap,
+            request_gap_jitter,
+            human_pause_chance,
+            human_pause_max,
             suspend_probe_interval_secs,
         }
     }

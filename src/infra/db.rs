@@ -65,11 +65,32 @@ pub async fn init_db(conn: &Connection) -> Result<()> {
                 token_id INTEGER,
                 cached_tokens INTEGER DEFAULT 0
             );
+            CREATE TABLE IF NOT EXISTS meta (
+                key TEXT PRIMARY KEY,
+                value INTEGER NOT NULL
+            );
             CREATE INDEX IF NOT EXISTS idx_usage_date ON request_usage(date);
             CREATE INDEX IF NOT EXISTS idx_usage_ts ON request_usage(timestamp);",
         )?;
+        // Monotonic token-ID counter: seeded once from the current max so a
+        // freshly added token never reuses a deleted token's ID (and thus its
+        // usage history), even after the tokens table becomes empty.
+        let _ = c.execute(
+            "INSERT OR IGNORE INTO meta (key, value)
+             SELECT 'next_token_id', COALESCE(MAX(id), 0) + 1 FROM tokens",
+            [],
+        );
         let _ = c.execute(
             "ALTER TABLE request_usage ADD COLUMN cached_tokens INTEGER DEFAULT 0",
+            [],
+        );
+        // Cascade semantics for tokens deleted before this cleanup existed:
+        // drop usage rows whose owning token is gone (AUTOINCREMENT never
+        // reuses their IDs, so these can never be re-attributed).
+        let _ = c.execute(
+            "DELETE FROM request_usage
+             WHERE token_id IS NOT NULL
+               AND token_id NOT IN (SELECT id FROM tokens)",
             [],
         );
         Ok(())
@@ -83,28 +104,59 @@ pub async fn add_token(conn: &Connection, token: &str, alias: Option<&str>) -> R
     let tok = token.to_string();
     let al = alias.map(|s| s.to_string());
     conn.call(move |c| {
-        let mut stmt = c.prepare("SELECT id FROM tokens ORDER BY id ASC")?;
-        let rows = stmt.query_map([], |r| r.get::<_, i64>(0))?;
-        let mut ids = Vec::new();
-        for id in rows {
-            ids.push(id?);
-        }
-        let mut target_id = 1;
-        for id in ids {
-            if id == target_id {
-                target_id += 1;
-            } else if id > target_id {
-                break;
-            }
-        }
+        // Persistent monotonic counter: survives deletes and never resets, so
+        // a new token can never inherit a deleted token's ID / usage history.
+        let next_id: i64 = c
+            .query_row(
+                "SELECT value FROM meta WHERE key = 'next_token_id'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or_else(|_| {
+                c.query_row("SELECT COALESCE(MAX(id), 0) + 1 FROM tokens", [], |r| r.get(0))
+                    .unwrap_or(1)
+            });
         c.execute(
             "INSERT INTO tokens (id, alias, token, status, last_used) VALUES (?1, ?2, ?3, 'ACTIVE', ?4)",
-            params![target_id, al, tok, now_timestamp()],
+            params![next_id, al, tok, now_timestamp()],
+        )?;
+        c.execute(
+            "INSERT INTO meta (key, value) VALUES ('next_token_id', ?1)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            params![next_id + 1],
         )?;
         Ok(())
     })
     .await
     .context("Failed to insert token")?;
+    Ok(())
+}
+
+pub async fn update_token(
+    conn: &Connection,
+    token_id: i64,
+    new_token: Option<&str>,
+    alias: Option<&str>,
+    status: Option<&str>,
+) -> Result<()> {
+    let tok = new_token.map(str::to_string);
+    let al = alias.map(str::to_string);
+    let st = status.map(str::to_string);
+    conn.call(move |c| {
+        c.execute(
+            "UPDATE tokens SET token = COALESCE(?1, token), alias = COALESCE(?2, alias), status = COALESCE(?3, status) WHERE id = ?4",
+            params![tok, al, st, token_id],
+        )?;
+        if st.as_deref() == Some("ACTIVE") {
+            c.execute(
+                "UPDATE tokens SET rate_limited_until = NULL WHERE id = ?1",
+                params![token_id],
+            )?;
+        }
+        Ok(())
+    })
+    .await
+    .context("Failed to update token")?;
     Ok(())
 }
 
@@ -163,6 +215,10 @@ pub async fn delete_token(conn: &Connection, token_id: i64) -> Result<()> {
         c.execute("DELETE FROM tokens WHERE id = ?1", params![token_id])?;
         c.execute(
             "DELETE FROM sessions WHERE token_id = ?1",
+            params![token_id],
+        )?;
+        c.execute(
+            "DELETE FROM request_usage WHERE token_id = ?1",
             params![token_id],
         )?;
         Ok(())
