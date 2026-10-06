@@ -22,4 +22,5 @@ services:
 
 volumes:
   deeperseeker_data:
+    name: deeperseeker_data
     driver: local
