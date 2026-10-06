@@ -13,6 +13,7 @@ pub struct AppConfig {
     pub token_concurrency: usize,
     pub cookie_cooldown: u64,
     pub request_gap: f64,
+    pub suspend_probe_interval_secs: u64,
 }
 
 impl AppConfig {
@@ -45,6 +46,11 @@ impl AppConfig {
             .ok()
             .and_then(|g| g.parse().ok())
             .unwrap_or(2.5);
+        let suspend_probe_interval_secs = env::var("DEEPSEEKER_SUSPEND_PROBE_INTERVAL_HOURS")
+            .ok()
+            .and_then(|h| h.parse::<u64>().ok())
+            .map(|h| h * 3600)
+            .unwrap_or(6 * 3600);
 
         Self {
             host,
@@ -58,6 +64,7 @@ impl AppConfig {
             token_concurrency,
             cookie_cooldown,
             request_gap,
+            suspend_probe_interval_secs,
         }
     }
 }

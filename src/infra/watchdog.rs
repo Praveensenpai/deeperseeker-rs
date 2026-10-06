@@ -1,4 +1,5 @@
 use crate::infra::db::{get_tokens, mark_active, now_timestamp};
+use crate::infra::deepseek_client::DeepSeekClient;
 use anyhow::Result;
 use std::time::Duration;
 use tokio_rusqlite::Connection;
@@ -36,6 +37,68 @@ pub fn start_token_watchdog(conn: Connection, interval: Duration) -> tokio::task
     })
 }
 
+pub async fn probe_and_recover_suspended(
+    conn: &Connection,
+    client: &DeepSeekClient,
+) -> Result<usize> {
+    let tokens = get_tokens(conn).await?;
+    let mut recovered = 0;
+
+    for tok in tokens {
+        if !tok.is_suspended() {
+            continue;
+        }
+
+        let alias = tok.alias.as_deref().unwrap_or("-");
+        tracing::debug!(
+            "Probing suspended token #{} ({}) for upstream recovery...",
+            tok.id,
+            alias
+        );
+
+        match client
+            .create_pow_challenge(&tok.token, "/api/v0/chat/completion")
+            .await
+        {
+            Ok(_) => {
+                mark_active(conn, tok.id).await?;
+                info!(
+                    "Suspended token #{} ({}) verified valid upstream; restored to ACTIVE",
+                    tok.id, alias
+                );
+                recovered += 1;
+            }
+            Err(e) => {
+                tracing::debug!(
+                    "Suspended token #{} ({}) probe failed ({:#}); remains SUSPENDED",
+                    tok.id,
+                    alias,
+                    e
+                );
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+
+    Ok(recovered)
+}
+
+pub fn start_suspended_token_probe(
+    conn: Connection,
+    client: DeepSeekClient,
+    interval: Duration,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(interval);
+        loop {
+            ticker.tick().await;
+            if let Err(e) = probe_and_recover_suspended(&conn, &client).await {
+                tracing::warn!("Suspended token recovery probe error: {e}");
+            }
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -53,6 +116,25 @@ mod tests {
 
         let recovered = check_and_recover_tokens(&conn).await.expect("check tokens");
         assert_eq!(recovered, 1);
+
+        let tokens = get_tokens(&conn).await.expect("get tokens");
+        assert_eq!(tokens[0].status, "ACTIVE");
+    }
+
+    #[tokio::test]
+    async fn test_suspended_probe_ignores_active_tokens() {
+        let conn = open_db(":memory:").await.expect("open db");
+        init_db(&conn).await.expect("init db");
+
+        add_token(&conn, "token_1", Some("t1"))
+            .await
+            .expect("add token");
+
+        let client = DeepSeekClient::new();
+        let recovered = probe_and_recover_suspended(&conn, &client)
+            .await
+            .expect("probe tokens");
+        assert_eq!(recovered, 0);
 
         let tokens = get_tokens(&conn).await.expect("get tokens");
         assert_eq!(tokens[0].status, "ACTIVE");

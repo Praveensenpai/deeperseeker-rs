@@ -164,7 +164,8 @@ fn test_dashboard_template_metrics_rendering() {
     let template_content = std::fs::read_to_string("templates/dashboard.html").unwrap();
     let base_content = std::fs::read_to_string("templates/base.html").unwrap();
     tera.add_raw_template("base.html", &base_content).unwrap();
-    tera.add_raw_template("dashboard.html", &template_content).unwrap();
+    tera.add_raw_template("dashboard.html", &template_content)
+        .unwrap();
 
     let mut ctx = tera::Context::new();
     ctx.insert("summaries", &[sample_summary_view()]);

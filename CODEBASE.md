@@ -58,7 +58,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn handle_unary_response (state : & AppState , model : String , token_id : i64 , session_id : String , parent_id : i64 , req_messages : & [ChatMessage] , upstream_resp : reqwest :: Response ,) -> Result < Response , (StatusCode , String) >
   ```
 
-### `src/api/dashboard.rs` (Role: api, Lines: 300)
+### `src/api/dashboard.rs` (Role: api, Lines: 299)
 - **Responsibility**: Core api logic in src/api/dashboard.rs
 - **Imports**: use crate :: api :: state :: AppState , use crate :: domain :: token :: Token , use crate :: domain :: usage :: { format_metric , TokenUsage } , use crate :: infra :: db :: { add_token as db_add_token , delete_token as db_delete_token , get_tokens , now_timestamp , } , use axum :: { extract :: { Form , Path , State } , http :: { header :: { COOKIE , SET_COOKIE } , HeaderMap , StatusCode , } , response :: { Html , IntoResponse , Redirect , Response } , } , use serde :: { Deserialize , Serialize } , use sha2 :: { Digest , Sha256 } , use std :: collections :: HashMap , use tera :: Context 
 - **Types & Enums**:
@@ -213,7 +213,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   pub struct UpdateArgs
   ```
 
-### `src/config.rs` (Role: general, Lines: 63)
+### `src/config.rs` (Role: general, Lines: 70)
 - **Responsibility**: Core general logic in src/config.rs
 - **Imports**: use std :: env 
 - **Types & Enums**:
@@ -496,13 +496,15 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn get_token_usages (conn : & Connection) -> Result < Vec < TokenUsage > >
   ```
 
-### `src/infra/watchdog.rs` (Role: infra, Lines: 60)
+### `src/infra/watchdog.rs` (Role: infra, Lines: 142)
 - **Responsibility**: Core infra logic in src/infra/watchdog.rs
-- **Imports**: use crate :: infra :: db :: { get_tokens , mark_active , now_timestamp } , use anyhow :: Result , use std :: time :: Duration , use tokio_rusqlite :: Connection , use tracing :: info 
+- **Imports**: use crate :: infra :: db :: { get_tokens , mark_active , now_timestamp } , use crate :: infra :: deepseek_client :: DeepSeekClient , use anyhow :: Result , use std :: time :: Duration , use tokio_rusqlite :: Connection , use tracing :: info 
 - **Public Functions & Signatures**:
   ```rust
   async fn check_and_recover_tokens (conn : & Connection) -> Result < usize >
   fn start_token_watchdog (conn : Connection , interval : Duration) -> tokio :: task :: JoinHandle < () >
+  async fn probe_and_recover_suspended (conn : & Connection , client : & DeepSeekClient ,) -> Result < usize >
+  fn start_suspended_token_probe (conn : Connection , client : DeepSeekClient , interval : Duration ,) -> tokio :: task :: JoinHandle < () >
   ```
 
 ### `src/infra.rs` (Role: infra, Lines: 11)
@@ -511,7 +513,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
 ### `src/lib.rs` (Role: general, Lines: 6)
 - **Responsibility**: Core general logic in src/lib.rs
 
-### `src/main.rs` (Role: general, Lines: 157)
+### `src/main.rs` (Role: general, Lines: 162)
 - **Responsibility**: Core general logic in src/main.rs
 - **Imports**: use anyhow :: { Context , Result } , use clap :: Parser , use deeperseeker :: api :: build_router , use deeperseeker :: api :: state :: AppState , use deeperseeker :: cli :: diagnostic :: run_diagnostics , use deeperseeker :: cli :: service :: { install_user_service , service_status , uninstall_user_service } , use deeperseeker :: cli :: token_cmd :: { add_token , list_tokens , remove_token , test_tokens } , use deeperseeker :: cli :: usage_cmd :: display_usage , use deeperseeker :: cli :: { Cli , Commands , ServeArgs , ServiceArgs , ServiceSubcommands , TokenArgs , TokenSubcommands , UpdateArgs , } , use deeperseeker :: config :: AppConfig , use deeperseeker :: infra :: db :: { init_db , open_db } , use deeperseeker :: infra :: deepseek_client :: DeepSeekClient , use deeperseeker :: infra :: pow :: PowSolver , use deeperseeker :: tui :: run_status , use std :: collections :: HashMap , use std :: sync :: Arc , use tera :: Tera , use tokio :: net :: TcpListener , use tokio :: sync :: Mutex , use tracing :: info 
 

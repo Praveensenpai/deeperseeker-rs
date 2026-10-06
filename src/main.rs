@@ -125,6 +125,11 @@ async fn run_server(args: ServeArgs) -> Result<()> {
     );
 
     let client = DeepSeekClient::new();
+    let _suspend_probe = deeperseeker::infra::watchdog::start_suspended_token_probe(
+        db.clone(),
+        client.clone(),
+        std::time::Duration::from_secs(config.suspend_probe_interval_secs),
+    );
     let template_pattern = deeperseeker::infra::assets::resolve_templates_pattern();
     let tera = Arc::new(Tera::new(&template_pattern).context("Failed compiling HTML templates")?);
 

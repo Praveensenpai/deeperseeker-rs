@@ -170,9 +170,8 @@ fn format_timestamp_title(secs: i64) -> String {
     let Ok(dt) = time::OffsetDateTime::from_unix_timestamp(secs) else {
         return "Unknown".to_string();
     };
-    let fmt = time::macros::format_description!(
-        "[year]-[month]-[day] [hour]:[minute]:[second] UTC"
-    );
+    let fmt =
+        time::macros::format_description!("[year]-[month]-[day] [hour]:[minute]:[second] UTC");
     dt.format(&fmt).unwrap_or_else(|_| "Unknown".to_string())
 }
 
