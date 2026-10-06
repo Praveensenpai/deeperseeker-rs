@@ -3,7 +3,10 @@ use crate::api::state::AppState;
 use crate::domain::openai::ChatCompletionRequest;
 use crate::domain::session::compute_signature;
 use crate::domain::token::Token;
-use crate::infra::db::{find_session, mark_active, mark_limited, pick_token, touch_token};
+use crate::domain::upstream::is_auth_failure;
+use crate::infra::db::{
+    find_session, mark_active, mark_limited, mark_suspended, pick_token, touch_token,
+};
 use crate::infra::deepseek_client::CompletionArgs;
 use crate::infra::media::{resolve_message_media, MediaContext};
 use crate::infra::prompt::build_prompt_for_turn;
@@ -22,11 +25,16 @@ pub async fn chat_completions(
     }
 
     let mut exclude = Vec::new();
-    for _ in 0..3 {
+    for _ in 0..5 {
         match execute_completion_attempt(&state, &req, &exclude).await {
             Ok(resp) => return Ok(resp),
             Err(AttemptError::RateLimited(tok_id)) => {
                 let _ = mark_limited(&state.db, tok_id, state.config.cookie_cooldown).await;
+                exclude.push(tok_id);
+            }
+            Err(AttemptError::InvalidToken(tok_id, msg)) => {
+                tracing::warn!("Token #{} suspended due to auth failure: {}", tok_id, msg);
+                let _ = mark_suspended(&state.db, tok_id).await;
                 exclude.push(tok_id);
             }
             Err(AttemptError::Fatal(status, msg)) => {
@@ -39,7 +47,7 @@ pub async fn chat_completions(
         StatusCode::TOO_MANY_REQUESTS,
         Json(json!({
             "error": {
-                "message": "All tokens exhausted or rate limited. Please retry in a moment.",
+                "message": "All tokens exhausted, suspended, or rate limited. Please retry in a moment.",
                 "type": "rate_limit_error",
                 "code": "rate_limit_exceeded"
             }
@@ -50,6 +58,7 @@ pub async fn chat_completions(
 #[derive(Debug)]
 pub(crate) enum AttemptError {
     RateLimited(i64),
+    InvalidToken(i64, String),
     Fatal(StatusCode, String),
 }
 
@@ -104,6 +113,9 @@ async fn execute_completion_attempt(
                     &prep.session_id,
                 )
                 .await;
+                if matches!(e, AttemptError::InvalidToken(_, _)) {
+                    return Err(e);
+                }
                 let fresh_prep = create_fresh_session(state, req, exclude).await?;
                 let fresh_token_id = fresh_prep.token.id;
                 state.increment_in_flight(fresh_token_id).await;
@@ -203,11 +215,15 @@ pub(crate) async fn create_fresh_session(
         )
     })?;
 
-    let session_id = state
-        .client
-        .create_chat_session(&tok.token)
-        .await
-        .map_err(|e| AttemptError::Fatal(StatusCode::BAD_GATEWAY, e.to_string()))?;
+    let session_id = match state.client.create_chat_session(&tok.token).await {
+        Ok(id) => id,
+        Err(e) => {
+            if is_auth_failure(&e) {
+                return Err(AttemptError::InvalidToken(tok.id, e.to_string()));
+            }
+            return Err(AttemptError::Fatal(StatusCode::BAD_GATEWAY, e.to_string()));
+        }
+    };
 
     tracing::info!(
         "Created fresh upstream session {} for token {}",
@@ -233,7 +249,13 @@ async fn run_chat_request(
         .client
         .send_completion_request(args)
         .await
-        .map_err(|_| AttemptError::RateLimited(prep.token.id))?;
+        .map_err(|e| {
+            if is_auth_failure(&e) {
+                AttemptError::InvalidToken(prep.token.id, e.to_string())
+            } else {
+                AttemptError::RateLimited(prep.token.id)
+            }
+        })?;
 
     if req.stream {
         handle_streaming_response(
@@ -275,11 +297,19 @@ pub(crate) async fn prepare_completion_args(
     let prompt = build_prompt_for_turn(&req.messages, req.tools.as_deref(), prep.is_first);
     let target_path = "/api/v0/chat/completion";
 
-    let challenge = state
+    let challenge = match state
         .client
         .create_pow_challenge(&prep.token.token, target_path)
         .await
-        .map_err(|_| AttemptError::RateLimited(prep.token.id))?;
+    {
+        Ok(c) => c,
+        Err(e) => {
+            if is_auth_failure(&e) {
+                return Err(AttemptError::InvalidToken(prep.token.id, e.to_string()));
+            }
+            return Err(AttemptError::RateLimited(prep.token.id));
+        }
+    };
 
     let pow_resp = state
         .pow_solver

@@ -63,7 +63,9 @@ async fn test_db_usage_recording_and_summaries() {
     assert_eq!(models[1].model, "deepseek-chat");
     assert_eq!(models[1].total_tokens, 1300);
 
-    let token_usages = deeperseeker::infra::usage_db::get_token_usages(&conn).await.unwrap();
+    let token_usages = deeperseeker::infra::usage_db::get_token_usages(&conn)
+        .await
+        .unwrap();
     assert_eq!(token_usages.len(), 2);
     let t1 = token_usages.iter().find(|u| u.token_id == 1).unwrap();
     assert_eq!(t1.requests, 2);

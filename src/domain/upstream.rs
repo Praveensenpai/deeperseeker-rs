@@ -13,10 +13,44 @@ pub struct PowChallenge {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct PowChallengeWrapper {
+pub struct DeepSeekApiResponse<T> {
     pub code: i64,
-    pub data: PowChallengeBizData,
+    #[serde(default)]
+    pub msg: Option<String>,
+    pub data: Option<T>,
 }
+
+impl<T> DeepSeekApiResponse<T> {
+    pub fn extract_data(self) -> anyhow::Result<T> {
+        if self.code != 0 {
+            let msg = self.msg.unwrap_or_else(|| "Unknown error".to_string());
+            if self.code == 40003
+                || msg.to_lowercase().contains("authorization failed")
+                || msg.to_lowercase().contains("invalid token")
+            {
+                return Err(anyhow::anyhow!(
+                    "Invalid token (code {}): {}",
+                    self.code,
+                    msg
+                ));
+            }
+            return Err(anyhow::anyhow!(
+                "DeepSeek API error (code {}): {}",
+                self.code,
+                msg
+            ));
+        }
+        self.data
+            .ok_or_else(|| anyhow::anyhow!("Missing response data from upstream"))
+    }
+}
+
+pub fn is_auth_failure(err: &anyhow::Error) -> bool {
+    let s = format!("{err:#}").to_lowercase();
+    s.contains("invalid token") || s.contains("authorization failed") || s.contains("40003")
+}
+
+pub type PowChallengeWrapper = DeepSeekApiResponse<PowChallengeBizData>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PowChallengeBizData {
@@ -38,11 +72,7 @@ pub struct PowSolution {
     pub target_path: String,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct CreateChatResponse {
-    pub code: i64,
-    pub data: CreateChatBizData,
-}
+pub type CreateChatResponse = DeepSeekApiResponse<CreateChatBizData>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateChatBizData {

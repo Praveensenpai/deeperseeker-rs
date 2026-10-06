@@ -52,3 +52,45 @@ async fn test_db_token_lifecycle() {
     assert_eq!(remaining.len(), 1);
     assert_eq!(remaining[0].id, 2);
 }
+
+#[tokio::test]
+async fn test_db_token_suspension() {
+    let db = open_db(":memory:").await.unwrap();
+    init_db(&db).await.unwrap();
+
+    add_token(&db, "tok-1", Some("t1")).await.unwrap();
+    add_token(&db, "tok-2", Some("t2")).await.unwrap();
+
+    deeperseeker::infra::db::mark_suspended(&db, 1)
+        .await
+        .unwrap();
+    let tokens = get_tokens(&db).await.unwrap();
+    assert_eq!(tokens[0].status, "SUSPENDED");
+    assert!(tokens[0].is_suspended());
+    assert!(!tokens[0].is_active());
+
+    let in_flight = HashMap::new();
+    let picked = pick_token(&db, &[], &in_flight, 8).await.unwrap();
+    assert!(picked.is_some());
+    assert_eq!(picked.unwrap().id, 2);
+}
+
+#[test]
+fn test_deepseek_api_response_auth_detection() {
+    use deeperseeker::domain::upstream::{is_auth_failure, DeepSeekApiResponse};
+
+    let auth_error_json =
+        r#"{"code": 40003, "msg": "Authorization Failed (invalid token)", "data": null}"#;
+    let resp: DeepSeekApiResponse<serde_json::Value> =
+        serde_json::from_str(auth_error_json).unwrap();
+    let res = resp.extract_data();
+    assert!(res.is_err());
+    let err = res.err().unwrap();
+    assert!(is_auth_failure(&err));
+
+    let success_json = r#"{"code": 0, "msg": "", "data": {"key": "val"}}"#;
+    let success: DeepSeekApiResponse<serde_json::Value> =
+        serde_json::from_str(success_json).unwrap();
+    let data = success.extract_data().unwrap();
+    assert_eq!(data["key"], "val");
+}

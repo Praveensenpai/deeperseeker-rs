@@ -108,7 +108,11 @@ impl DeepSeekClient {
             .await
             .context("Failed to parse PoW challenge response")?;
 
-        Ok(wrapper.data.biz_data.challenge)
+        let data = wrapper
+            .extract_data()
+            .context("PoW challenge rejected by upstream")?;
+
+        Ok(data.biz_data.challenge)
     }
 
     pub async fn create_chat_session(&self, token: &str) -> Result<String> {
@@ -136,7 +140,11 @@ impl DeepSeekClient {
             .await
             .context("Failed to parse create chat response")?;
 
-        Ok(wrapper.data.biz_data.chat_session.id)
+        let data = wrapper
+            .extract_data()
+            .context("Create chat session rejected by upstream")?;
+
+        Ok(data.biz_data.chat_session.id)
     }
 
     pub async fn send_completion_request(&self, args: CompletionArgs) -> Result<reqwest::Response> {

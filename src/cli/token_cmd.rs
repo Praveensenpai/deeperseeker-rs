@@ -103,12 +103,16 @@ pub async fn test_tokens(target_id: Option<i64>, db_path: &str) -> Result<()> {
         candidates.len()
     );
     for t in candidates {
-        test_single_token(&client, t).await;
+        test_single_token(&conn, &client, t).await;
     }
     Ok(())
 }
 
-async fn test_single_token(client: &DeepSeekClient, token: &Token) {
+async fn test_single_token(
+    conn: &tokio_rusqlite::Connection,
+    client: &DeepSeekClient,
+    token: &Token,
+) {
     let masked = mask_token(&token.token);
     print!(
         "  • Token #{} ({}) [{}] ... ",
@@ -125,14 +129,20 @@ async fn test_single_token(client: &DeepSeekClient, token: &Token) {
 
     match res {
         Ok(challenge) => {
+            let _ = crate::infra::db::mark_active(conn, token.id).await;
             println!(
-                "VALID (Difficulty: {}, {:.1}ms)",
+                "VALID (Difficulty: {}, {:.1}ms) -> ACTIVE",
                 challenge.difficulty,
                 elapsed.as_secs_f64() * 1000.0
             );
         }
         Err(e) => {
-            println!("INVALID / FAILED ({})", e);
+            if crate::domain::upstream::is_auth_failure(&e) {
+                let _ = crate::infra::db::mark_suspended(conn, token.id).await;
+                println!("INVALID / REVOKED ({e:#}) -> SUSPENDED");
+            } else {
+                println!("FAILED ({e:#})");
+            }
         }
     }
 }

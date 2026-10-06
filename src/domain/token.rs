@@ -19,6 +19,10 @@ impl Token {
         self.status == "RATE_LIMITED"
     }
 
+    pub fn is_suspended(&self) -> bool {
+        self.status == "SUSPENDED"
+    }
+
     pub fn is_expired_rate_limit(&self, now: f64) -> bool {
         if let Some(until) = self.rate_limited_until {
             now >= until

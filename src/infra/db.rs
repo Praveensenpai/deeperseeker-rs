@@ -199,6 +199,19 @@ pub async fn mark_active(conn: &Connection, token_id: i64) -> Result<()> {
     Ok(())
 }
 
+pub async fn mark_suspended(conn: &Connection, token_id: i64) -> Result<()> {
+    conn.call(move |c| {
+        c.execute(
+            "UPDATE tokens SET status = 'SUSPENDED', rate_limited_until = NULL WHERE id = ?1",
+            params![token_id],
+        )?;
+        Ok(())
+    })
+    .await
+    .context("Failed to mark token suspended")?;
+    Ok(())
+}
+
 pub async fn touch_token(conn: &Connection, token_id: i64) -> Result<()> {
     let now = now_timestamp();
     conn.call(move |c| {
