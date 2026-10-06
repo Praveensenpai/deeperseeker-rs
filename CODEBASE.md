@@ -23,9 +23,9 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn anthropic_messages (State (state) : State < AppState > , Json (req) : Json < AnthropicMessageRequest > ,) -> Result < Response , (StatusCode , Json < serde_json :: Value >) >
   ```
 
-### `src/api/chat.rs` (Role: api, Lines: 349)
+### `src/api/chat.rs` (Role: api, Lines: 378)
 - **Responsibility**: Core api logic in src/api/chat.rs
-- **Imports**: use crate :: api :: chat_stream :: { handle_streaming_response , handle_unary_response } , use crate :: api :: state :: AppState , use crate :: domain :: openai :: ChatCompletionRequest , use crate :: domain :: session :: compute_signature , use crate :: domain :: token :: Token , use crate :: domain :: upstream :: is_auth_failure , use crate :: infra :: db :: { find_session , mark_active , mark_limited , mark_suspended , pick_token , touch_token , } , use crate :: infra :: deepseek_client :: CompletionArgs , use crate :: infra :: media :: { resolve_message_media , MediaContext } , use crate :: infra :: prompt :: build_prompt_for_turn , use axum :: { extract :: State , http :: StatusCode , response :: Response , Json } , use serde_json :: json 
+- **Imports**: use crate :: api :: chat_stream :: { handle_streaming_response , handle_unary_response } , use crate :: api :: state :: AppState , use crate :: domain :: openai :: ChatCompletionRequest , use crate :: domain :: session :: compute_signature , use crate :: domain :: token :: Token , use crate :: domain :: upstream :: is_auth_failure , use crate :: infra :: db :: { find_session , mark_active , mark_expired , mark_limited , pick_token , touch_token , } , use crate :: infra :: deepseek_client :: CompletionArgs , use crate :: infra :: media :: { resolve_message_media , MediaContext } , use crate :: infra :: prompt :: build_prompt_for_turn , use axum :: { extract :: State , http :: StatusCode , response :: Response , Json } , use serde_json :: json 
 - **Public Functions & Signatures**:
   ```rust
   async fn chat_completions (State (state) : State < AppState > , Json (req) : Json < ChatCompletionRequest > ,) -> Result < Response , (StatusCode , Json < serde_json :: Value >) >
@@ -292,7 +292,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn compute_next_signature (messages : & [ChatMessage] , model : & str , assistant_content : & str , tool_calls : Option < & [ToolCall] > ,) -> String
   ```
 
-### `src/domain/token.rs` (Role: domain, Lines: 43)
+### `src/domain/token.rs` (Role: domain, Lines: 47)
 - **Responsibility**: Core domain logic in src/domain/token.rs
 - **Imports**: use serde :: { Deserialize , Serialize } 
 - **Types & Enums**:
@@ -303,6 +303,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   ```rust
   fn is_active (& self) -> bool
   fn is_rate_limited (& self) -> bool
+  fn is_expired (& self) -> bool
   fn is_suspended (& self) -> bool
   fn is_expired_rate_limit (& self , now : f64) -> bool
   fn masked_token (& self) -> String
@@ -362,7 +363,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn resolve_db_path (custom : Option < & str >) -> String
   ```
 
-### `src/infra/db.rs` (Role: infra, Lines: 374)
+### `src/infra/db.rs` (Role: infra, Lines: 378)
 - **Responsibility**: Core infra logic in src/infra/db.rs
 - **Imports**: use crate :: domain :: session :: Session , use crate :: domain :: token :: Token , use anyhow :: { Context , Result } , use rusqlite :: params , use std :: collections :: HashMap , use std :: time :: { SystemTime , UNIX_EPOCH } , use tokio_rusqlite :: Connection 
 - **Public Functions & Signatures**:
@@ -376,6 +377,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn delete_token (conn : & Connection , token_id : i64) -> Result < () >
   async fn mark_limited (conn : & Connection , token_id : i64 , cooldown_secs : u64) -> Result < () >
   async fn mark_active (conn : & Connection , token_id : i64) -> Result < () >
+  async fn mark_expired (conn : & Connection , token_id : i64) -> Result < () >
   async fn mark_suspended (conn : & Connection , token_id : i64) -> Result < () >
   async fn touch_token (conn : & Connection , token_id : i64) -> Result < () >
   async fn pick_token (conn : & Connection , exclude : & [i64] , in_flight : & HashMap < i64 , usize > , concurrency_cap : usize ,) -> Result < Option < Token > >

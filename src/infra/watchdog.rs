@@ -45,13 +45,13 @@ pub async fn probe_and_recover_suspended(
     let mut recovered = 0;
 
     for tok in tokens {
-        if !tok.is_suspended() {
+        if !tok.is_expired() {
             continue;
         }
 
         let alias = tok.alias.as_deref().unwrap_or("-");
         tracing::debug!(
-            "Probing suspended token #{} ({}) for upstream recovery...",
+            "Probing expired token #{} ({}) for upstream recovery...",
             tok.id,
             alias
         );
@@ -63,14 +63,14 @@ pub async fn probe_and_recover_suspended(
             Ok(_) => {
                 mark_active(conn, tok.id).await?;
                 info!(
-                    "Suspended token #{} ({}) verified valid upstream; restored to ACTIVE",
+                    "Token #{} ({}) verified valid upstream; restored to ACTIVE",
                     tok.id, alias
                 );
                 recovered += 1;
             }
             Err(e) => {
                 tracing::debug!(
-                    "Suspended token #{} ({}) probe failed ({:#}); remains SUSPENDED",
+                    "Token #{} ({}) probe failed ({:#}); remains EXPIRED",
                     tok.id,
                     alias,
                     e

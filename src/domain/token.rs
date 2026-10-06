@@ -19,8 +19,12 @@ impl Token {
         self.status == "RATE_LIMITED"
     }
 
+    pub fn is_expired(&self) -> bool {
+        self.status == "EXPIRED" || self.status == "SUSPENDED"
+    }
+
     pub fn is_suspended(&self) -> bool {
-        self.status == "SUSPENDED"
+        self.is_expired()
     }
 
     pub fn is_expired_rate_limit(&self, now: f64) -> bool {

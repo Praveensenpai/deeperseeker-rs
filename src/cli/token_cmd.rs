@@ -138,8 +138,8 @@ async fn test_single_token(
         }
         Err(e) => {
             if crate::domain::upstream::is_auth_failure(&e) {
-                let _ = crate::infra::db::mark_suspended(conn, token.id).await;
-                println!("INVALID / REVOKED ({e:#}) -> SUSPENDED");
+                let _ = crate::infra::db::mark_expired(conn, token.id).await;
+                println!("INVALID / EXPIRED ({e:#}) -> EXPIRED");
             } else {
                 println!("FAILED ({e:#})");
             }

@@ -199,17 +199,21 @@ pub async fn mark_active(conn: &Connection, token_id: i64) -> Result<()> {
     Ok(())
 }
 
-pub async fn mark_suspended(conn: &Connection, token_id: i64) -> Result<()> {
+pub async fn mark_expired(conn: &Connection, token_id: i64) -> Result<()> {
     conn.call(move |c| {
         c.execute(
-            "UPDATE tokens SET status = 'SUSPENDED', rate_limited_until = NULL WHERE id = ?1",
+            "UPDATE tokens SET status = 'EXPIRED', rate_limited_until = NULL WHERE id = ?1",
             params![token_id],
         )?;
         Ok(())
     })
     .await
-    .context("Failed to mark token suspended")?;
+    .context("Failed to mark token expired")?;
     Ok(())
+}
+
+pub async fn mark_suspended(conn: &Connection, token_id: i64) -> Result<()> {
+    mark_expired(conn, token_id).await
 }
 
 pub async fn touch_token(conn: &Connection, token_id: i64) -> Result<()> {

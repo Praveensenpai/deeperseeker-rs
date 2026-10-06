@@ -65,7 +65,8 @@ async fn test_db_token_suspension() {
         .await
         .unwrap();
     let tokens = get_tokens(&db).await.unwrap();
-    assert_eq!(tokens[0].status, "SUSPENDED");
+    assert_eq!(tokens[0].status, "EXPIRED");
+    assert!(tokens[0].is_expired());
     assert!(tokens[0].is_suspended());
     assert!(!tokens[0].is_active());
 

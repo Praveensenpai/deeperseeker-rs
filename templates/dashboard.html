@@ -122,7 +122,7 @@
                         {% elif tok.status == "RATE_LIMITED" %}
                             <span class="status-dot status-limited" title="Rate Limited"></span>
                         {% else %}
-                            <span class="status-dot status-suspended" title="Suspended"></span>
+                            <span class="status-dot status-expired" title="Expired / Needs Refresh"></span>
                         {% endif %}
                     </td>
                     <td style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--text-secondary);" title="{{ tok.last_used_title }}">{{ tok.last_used_ago }}</td>

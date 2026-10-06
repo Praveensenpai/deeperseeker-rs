@@ -5,7 +5,7 @@ use crate::domain::session::compute_signature;
 use crate::domain::token::Token;
 use crate::domain::upstream::is_auth_failure;
 use crate::infra::db::{
-    find_session, mark_active, mark_limited, mark_suspended, pick_token, touch_token,
+    find_session, mark_active, mark_expired, mark_limited, pick_token, touch_token,
 };
 use crate::infra::deepseek_client::CompletionArgs;
 use crate::infra::media::{resolve_message_media, MediaContext};
@@ -33,8 +33,7 @@ pub async fn chat_completions(
                 exclude.push(tok_id);
             }
             Err(AttemptError::InvalidToken(tok_id, msg)) => {
-                tracing::warn!("Token #{} suspended due to auth failure: {}", tok_id, msg);
-                let _ = mark_suspended(&state.db, tok_id).await;
+                handle_token_auth_failure(&state, tok_id, &msg).await;
                 exclude.push(tok_id);
             }
             Err(AttemptError::Fatal(status, msg)) => {
@@ -80,6 +79,39 @@ async fn pace_token_request(state: &AppState, last_used: Option<f64>) {
     }
 }
 
+async fn handle_token_auth_failure(state: &AppState, tok_id: i64, msg: &str) {
+    let Ok(Some(tok)) = crate::infra::db::get_token(&state.db, tok_id).await else {
+        return;
+    };
+
+    match state
+        .client
+        .create_pow_challenge(&tok.token, "/api/v0/chat/completion")
+        .await
+    {
+        Ok(_) => {
+            tracing::warn!(
+                "Token #{} chat error ({msg}), but passed standalone verification; keeping ACTIVE",
+                tok_id
+            );
+        }
+        Err(e) if is_auth_failure(&e) => {
+            tracing::warn!(
+                "Token #{} confirmed expired/invalid by upstream ({e:#}); marking EXPIRED",
+                tok_id
+            );
+            let _ = mark_expired(&state.db, tok_id).await;
+        }
+        Err(e) => {
+            tracing::warn!(
+                "Token #{} standalone probe failed non-auth error ({e:#}); applying rate limit",
+                tok_id
+            );
+            let _ = mark_limited(&state.db, tok_id, state.config.cookie_cooldown).await;
+        }
+    }
+}
+
 async fn execute_completion_attempt(
     state: &AppState,
     req: &ChatCompletionRequest,
@@ -113,9 +145,6 @@ async fn execute_completion_attempt(
                     &prep.session_id,
                 )
                 .await;
-                if matches!(e, AttemptError::InvalidToken(_, _)) {
-                    return Err(e);
-                }
                 let fresh_prep = create_fresh_session(state, req, exclude).await?;
                 let fresh_token_id = fresh_prep.token.id;
                 state.increment_in_flight(fresh_token_id).await;
