@@ -401,7 +401,7 @@ fn auth_hash(user: &str, secret: &str) -> String {
     hex::encode(hasher.finalize())
 }
 
-fn is_authenticated(state: &AppState, headers: &HeaderMap) -> bool {
+pub(crate) fn is_authenticated(state: &AppState, headers: &HeaderMap) -> bool {
     let cookie_hdr = headers
         .get(COOKIE)
         .and_then(|c| c.to_str().ok())

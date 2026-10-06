@@ -5,6 +5,8 @@ pub mod chat_stream;
 pub mod dashboard;
 pub mod files;
 pub mod health;
+pub mod live_log;
+pub mod logs;
 pub mod middleware;
 pub mod models;
 pub mod state;
@@ -18,6 +20,7 @@ use crate::api::dashboard::{
 };
 use crate::api::files::{upload_file_anthropic, upload_file_openai};
 use crate::api::health::{health, root};
+use crate::api::logs::{get_logs, stream_logs};
 use crate::api::middleware::require_api_key;
 use crate::api::models::list_models;
 use crate::api::state::AppState;
@@ -48,6 +51,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/login", get(show_login).post(submit_login))
         .route("/logout", get(logout))
         .route("/dashboard", get(show_dashboard))
+        .route("/api/logs", get(get_logs))
+        .route("/api/logs/stream", get(stream_logs))
         .route("/tokens/add", post(add_token))
         .route("/tokens/{token_id}/edit", post(edit_token))
         .route("/tokens/{token_id}/verify", post(verify_token))

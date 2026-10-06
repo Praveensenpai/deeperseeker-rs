@@ -1,3 +1,4 @@
+use crate::api::live_log::LiveLog;
 use crate::config::AppConfig;
 use crate::infra::deepseek_client::DeepSeekClient;
 use crate::infra::pow::PowSolver;
@@ -15,6 +16,7 @@ pub struct AppState {
     pub pow_solver: Arc<PowSolver>,
     pub in_flight: Arc<Mutex<HashMap<i64, usize>>>,
     pub tera: Arc<Tera>,
+    pub live_log: Arc<LiveLog>,
 }
 
 impl AppState {

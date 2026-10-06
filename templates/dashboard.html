@@ -201,6 +201,221 @@
     </div>
 </div>
 
+<!-- Live Request Logs -->
+<div class="card" id="live-logs-card">
+    <div class="card-header">
+        <h2 class="card-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-emerald);"><path d="M4 17l6-6-6-6"></path><path d="M12 19h8"></path></svg>
+            Live Request Logs
+        </h2>
+        <div class="log-controls">
+            <span class="log-conn" id="log-conn"><span class="pulse-dot"></span> Connecting</span>
+            <button type="button" class="btn-ghost" id="log-pause" onclick="toggleLogPause()">Pause</button>
+            <button type="button" class="btn-ghost" onclick="clearLogs()">Clear</button>
+        </div>
+    </div>
+    <div class="log-stream" id="log-stream">
+        <div class="log-empty" id="log-empty">Waiting for requests…</div>
+    </div>
+</div>
+
+<script>
+    const LOG_MAX = 100;
+    let logSource = null;
+    let logPaused = false;
+
+    function escapeText(value) {
+        return value == null ? "" : String(value);
+    }
+
+    function logDetailSection(label, text, cls) {
+        const wrap = document.createElement("div");
+        wrap.className = "log-section";
+        const tag = document.createElement("span");
+        tag.className = "log-section-label";
+        tag.textContent = label;
+        const pre = document.createElement("pre");
+        pre.className = "log-pre " + cls;
+        pre.textContent = escapeText(text);
+        wrap.appendChild(tag);
+        wrap.appendChild(pre);
+        return wrap;
+    }
+
+    function buildLogEntry(entry) {
+        const root = document.createElement("div");
+        root.className = "log-entry";
+        root.id = "log-" + entry.id;
+        root.dataset.id = entry.id;
+
+        const row = document.createElement("div");
+        row.className = "log-row";
+        row.addEventListener("click", () => root.classList.toggle("log-open"));
+
+        const status = document.createElement("span");
+        status.className = "log-status status-" + (entry.status || "in_progress");
+        row.appendChild(status);
+
+        const time = document.createElement("span");
+        time.className = "log-time";
+        time.textContent = new Date((entry.ts || 0) * 1000).toLocaleTimeString();
+        row.appendChild(time);
+
+        const model = document.createElement("span");
+        model.className = "log-model";
+        model.textContent = escapeText(entry.model);
+        row.appendChild(model);
+
+        const mode = document.createElement("span");
+        mode.className = "log-badge";
+        mode.textContent = entry.stream ? "stream" : "unary";
+        row.appendChild(mode);
+
+        const token = document.createElement("span");
+        token.className = "log-badge";
+        token.textContent = entry.token_id != null ? "token #" + entry.token_id : "token ?";
+        row.appendChild(token);
+
+        const metrics = document.createElement("span");
+        metrics.className = "log-meta";
+        metrics.dataset.role = "metrics";
+        row.appendChild(metrics);
+
+        const finish = document.createElement("span");
+        finish.className = "log-finish";
+        finish.dataset.role = "finish";
+        row.appendChild(finish);
+
+        root.appendChild(row);
+
+        const detail = document.createElement("div");
+        detail.className = "log-detail";
+        detail.appendChild(logDetailSection("Input", entry.input || "", "log-pre-input"));
+        detail.appendChild(logDetailSection("Reasoning", entry.reasoning || "", "log-pre-reasoning"));
+        detail.appendChild(logDetailSection("Output", entry.output || "", "log-pre-output"));
+        root.appendChild(detail);
+
+        root.querySelector("[data-role='metrics']").textContent = formatMetrics(entry);
+        root.querySelector("[data-role='finish']").textContent = escapeText(entry.finish_reason);
+        return root;
+    }
+
+    function formatMetrics(entry) {
+        if (!entry.status || entry.status === "in_progress") {
+            return "…";
+        }
+        const duration = entry.duration_ms ? entry.duration_ms + "ms" : "";
+        const tokens = (entry.prompt_tokens || 0) + "→" + (entry.completion_tokens || 0);
+        return duration + " · " + tokens;
+    }
+
+    function updateLogEntry(entry) {
+        const root = document.getElementById("log-" + entry.id);
+        if (!root) {
+            prependLogEntry(entry);
+            return;
+        }
+        const status = root.querySelector(".log-status");
+        status.className = "log-status status-" + entry.status;
+        root.querySelector("[data-role='metrics']").textContent = formatMetrics(entry);
+        root.querySelector("[data-role='finish']").textContent = escapeText(entry.finish_reason);
+        root.querySelector(".log-pre-output").textContent = escapeText(entry.output);
+        root.querySelector(".log-pre-reasoning").textContent = escapeText(entry.reasoning);
+        if (entry.error) {
+            root.querySelector(".log-pre-output").textContent += "\n\n[error] " + entry.error;
+        }
+    }
+
+    function prependLogEntry(entry) {
+        const stream = document.getElementById("log-stream");
+        const empty = document.getElementById("log-empty");
+        if (empty) empty.remove();
+        const node = buildLogEntry(entry);
+        stream.insertBefore(node, stream.firstChild);
+        while (stream.children.length > LOG_MAX) {
+            stream.removeChild(stream.lastChild);
+        }
+    }
+
+    function handleLogEvent(event) {
+        if (logPaused) return;
+        const stream = document.getElementById("log-stream");
+        if (event.kind === "begin") {
+            prependLogEntry(event);
+        } else if (event.kind === "delta") {
+            const root = document.getElementById("log-" + event.id);
+            if (!root) return;
+            if (event.reasoning) {
+                const pre = root.querySelector(".log-pre-reasoning");
+                pre.textContent += event.reasoning;
+            }
+            if (event.content) {
+                const pre = root.querySelector(".log-pre-output");
+                pre.textContent += event.content;
+            }
+        } else if (event.kind === "end") {
+            updateLogEntry(event);
+        }
+        return stream;
+    }
+
+    function connectLogs() {
+        if (logSource) logSource.close();
+        const conn = document.getElementById("log-conn");
+        logSource = new EventSource("/api/logs/stream");
+        logSource.addEventListener("snapshot", (evt) => {
+            const entries = JSON.parse(evt.data);
+            const stream = document.getElementById("log-stream");
+            stream.innerHTML = "";
+            if (!entries.length) {
+                stream.innerHTML = '<div class="log-empty" id="log-empty">Waiting for requests…</div>';
+                return;
+            }
+            entries.slice().reverse().forEach((entry) => stream.appendChild(buildLogEntry(entry)));
+        });
+        logSource.onmessage = (evt) => {
+            try {
+                handleLogEvent(JSON.parse(evt.data));
+            } catch (err) {
+                console.warn("bad log event", err);
+            }
+        };
+        logSource.onopen = () => {
+            conn.innerHTML = '<span class="pulse-dot"></span> Live';
+            conn.classList.add("log-conn-live");
+        };
+        logSource.onerror = () => {
+            conn.innerHTML = '<span class="pulse-dot"></span> Reconnecting';
+            conn.classList.remove("log-conn-live");
+        };
+    }
+
+    function toggleLogPause() {
+        logPaused = !logPaused;
+        const btn = document.getElementById("log-pause");
+        btn.textContent = logPaused ? "Resume" : "Pause";
+        btn.classList.toggle("btn-active", logPaused);
+        if (!logPaused) {
+            fetch("/api/logs").then((r) => r.json()).then((entries) => {
+                const stream = document.getElementById("log-stream");
+                stream.innerHTML = "";
+                if (!entries.length) {
+                    stream.innerHTML = '<div class="log-empty" id="log-empty">Waiting for requests…</div>';
+                    return;
+                }
+                entries.slice().reverse().forEach((entry) => stream.appendChild(buildLogEntry(entry)));
+            });
+        }
+    }
+
+    function clearLogs() {
+        const stream = document.getElementById("log-stream");
+        stream.innerHTML = '<div class="log-empty" id="log-empty">Waiting for requests…</div>';
+    }
+
+    connectLogs();
+</script>
+
 <script>
     function cleanTokenInput(form) {
         const input = document.getElementById("auth_token_input");

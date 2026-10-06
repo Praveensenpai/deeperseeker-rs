@@ -49,9 +49,9 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn current_timestamp () -> u64
   ```
 
-### `src/api/chat_stream.rs` (Role: api, Lines: 471)
+### `src/api/chat_stream.rs` (Role: api, Lines: 535)
 - **Responsibility**: Core api logic in src/api/chat_stream.rs
-- **Imports**: use crate :: api :: chat_chunks :: { build_chat_response , build_terminal_chunk , create_openai_chunks , current_timestamp , make_reasoning_chunk , make_text_chunk , make_tool_calls_chunk , ChatResponseArgs , } , use crate :: api :: state :: AppState , use crate :: domain :: openai :: ChatMessage , use crate :: domain :: session :: { compute_next_signature , next_parent_id , Session } , use crate :: infra :: dsml :: { find_dsml_block_start , parse_dsml , safe_unambiguous_len , ParsedDsml } , use crate :: infra :: session_db :: save_session , pub use crate :: infra :: sse :: { drain_sse_lines , extract_chunks_from_event , parse_sse_line , ExtractedChunk , SseLineResult , } , use crate :: infra :: usage_db :: record_usage , use axum :: { body :: Body , http :: { header :: CONTENT_TYPE , StatusCode } , response :: { IntoResponse , Response } , Json , } , use futures :: StreamExt , use uuid :: Uuid 
+- **Imports**: use crate :: api :: chat_chunks :: { build_chat_response , build_terminal_chunk , create_openai_chunks , current_timestamp , make_reasoning_chunk , make_text_chunk , make_tool_calls_chunk , ChatResponseArgs , } , use crate :: api :: live_log :: { render_input , LogFinish , LogHandle , LogSeed } , use crate :: api :: state :: AppState , use crate :: domain :: openai :: ChatMessage , use crate :: domain :: session :: { compute_next_signature , next_parent_id , Session } , use crate :: infra :: dsml :: { find_dsml_block_start , parse_dsml , safe_unambiguous_len , ParsedDsml } , use crate :: infra :: session_db :: save_session , pub use crate :: infra :: sse :: { drain_sse_lines , extract_chunks_from_event , parse_sse_line , ExtractedChunk , SseLineResult , } , use crate :: infra :: usage_db :: record_usage , use axum :: { body :: Body , http :: { header :: CONTENT_TYPE , StatusCode } , response :: { IntoResponse , Response } , Json , } , use futures :: StreamExt , use uuid :: Uuid 
 - **Public Functions & Signatures**:
   ```rust
   async fn handle_streaming_response (state : & AppState , req : crate :: domain :: openai :: ChatCompletionRequest , token_id : i64 , session_id : String , parent_id : i64 , upstream_resp : reqwest :: Response ,) -> Result < Response , (StatusCode , String) >
@@ -100,6 +100,42 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn health (State (state) : State < AppState >) -> impl IntoResponse
   ```
 
+### `src/api/live_log.rs` (Role: api, Lines: 343)
+- **Responsibility**: Core api logic in src/api/live_log.rs
+- **Imports**: use crate :: domain :: openai :: ChatMessage , use serde :: Serialize , use std :: collections :: VecDeque , use std :: sync :: atomic :: { AtomicU64 , Ordering } , use std :: sync :: { Arc , Mutex , MutexGuard } , use std :: time :: Instant , use tokio :: sync :: broadcast 
+- **Types & Enums**:
+  ```rust
+  pub struct LogEntry
+  pub enum LogEvent
+  pub struct LogSeed
+  pub struct LogFinish
+  pub struct LiveLog
+  pub struct LogHandle
+  ```
+- **Public Functions & Signatures**:
+  ```rust
+  fn new () -> Self
+  fn begin (self : & Arc < Self > , seed : LogSeed) -> LogHandle
+  fn snapshot (& self) -> Vec < LogEntry >
+  fn subscribe (& self) -> broadcast :: Receiver < LogEvent >
+  fn append_content (& self , text : & str)
+  fn append_reasoning (& self , text : & str)
+  fn set_output (& self , content : & str , reasoning : Option < & str >)
+  fn reset_output (& self)
+  fn finish (& self , finish : LogFinish)
+  fn fail (& self , error : impl Into < String >)
+  fn render_input (messages : & [ChatMessage]) -> String
+  ```
+
+### `src/api/logs.rs` (Role: api, Lines: 55)
+- **Responsibility**: Core api logic in src/api/logs.rs
+- **Imports**: use crate :: api :: dashboard :: is_authenticated , use crate :: api :: state :: AppState , use axum :: { body :: Body , extract :: State , http :: { header :: { CACHE_CONTROL , CONTENT_TYPE } , HeaderMap , StatusCode , } , response :: { IntoResponse , Response } , Json , } , use tokio :: sync :: broadcast :: error :: RecvError 
+- **Public Functions & Signatures**:
+  ```rust
+  async fn get_logs (State (state) : State < AppState > , headers : HeaderMap) -> Response
+  async fn stream_logs (State (state) : State < AppState > , headers : HeaderMap) -> Response
+  ```
+
 ### `src/api/middleware.rs` (Role: api, Lines: 47)
 - **Responsibility**: Core api logic in src/api/middleware.rs
 - **Imports**: use crate :: api :: state :: AppState , use axum :: { extract :: { Request , State } , http :: { header :: AUTHORIZATION , StatusCode } , middleware :: Next , response :: { IntoResponse , Response } , Json , } , use serde_json :: json 
@@ -116,9 +152,9 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn list_models () -> impl IntoResponse
   ```
 
-### `src/api/state.rs` (Role: api, Lines: 40)
+### `src/api/state.rs` (Role: api, Lines: 42)
 - **Responsibility**: Core api logic in src/api/state.rs
-- **Imports**: use crate :: config :: AppConfig , use crate :: infra :: deepseek_client :: DeepSeekClient , use crate :: infra :: pow :: PowSolver , use std :: collections :: HashMap , use std :: sync :: Arc , use tera :: Tera , use tokio :: sync :: Mutex , use tokio_rusqlite :: Connection 
+- **Imports**: use crate :: api :: live_log :: LiveLog , use crate :: config :: AppConfig , use crate :: infra :: deepseek_client :: DeepSeekClient , use crate :: infra :: pow :: PowSolver , use std :: collections :: HashMap , use std :: sync :: Arc , use tera :: Tera , use tokio :: sync :: Mutex , use tokio_rusqlite :: Connection 
 - **Types & Enums**:
   ```rust
   pub struct AppState
@@ -142,9 +178,9 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn get_usage_metrics (State (state) : State < AppState > , Query (query) : Query < UsageQuery > ,) -> impl IntoResponse
   ```
 
-### `src/api.rs` (Role: api, Lines: 65)
+### `src/api.rs` (Role: api, Lines: 70)
 - **Responsibility**: Core api logic in src/api.rs
-- **Imports**: use crate :: api :: anthropic :: anthropic_messages , use crate :: api :: chat :: chat_completions , use crate :: api :: dashboard :: { add_token , delete_token , edit_token , logout , show_dashboard , show_login , submit_login , verify_token , } , use crate :: api :: files :: { upload_file_anthropic , upload_file_openai } , use crate :: api :: health :: { health , root } , use crate :: api :: middleware :: require_api_key , use crate :: api :: models :: list_models , use crate :: api :: state :: AppState , use crate :: api :: usage :: get_usage_metrics , use axum :: { middleware :: from_fn_with_state , routing :: { get , post } , Router , } , use tower_http :: cors :: CorsLayer , use tower_http :: services :: ServeDir 
+- **Imports**: use crate :: api :: anthropic :: anthropic_messages , use crate :: api :: chat :: chat_completions , use crate :: api :: dashboard :: { add_token , delete_token , edit_token , logout , show_dashboard , show_login , submit_login , verify_token , } , use crate :: api :: files :: { upload_file_anthropic , upload_file_openai } , use crate :: api :: health :: { health , root } , use crate :: api :: logs :: { get_logs , stream_logs } , use crate :: api :: middleware :: require_api_key , use crate :: api :: models :: list_models , use crate :: api :: state :: AppState , use crate :: api :: usage :: get_usage_metrics , use axum :: { middleware :: from_fn_with_state , routing :: { get , post } , Router , } , use tower_http :: cors :: CorsLayer , use tower_http :: services :: ServeDir 
 - **Public Functions & Signatures**:
   ```rust
   fn build_router (state : AppState) -> Router
@@ -539,7 +575,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
 ### `src/lib.rs` (Role: general, Lines: 6)
 - **Responsibility**: Core general logic in src/lib.rs
 
-### `src/main.rs` (Role: general, Lines: 177)
+### `src/main.rs` (Role: general, Lines: 179)
 - **Responsibility**: Core general logic in src/main.rs
 - **Imports**: use anyhow :: { Context , Result } , use clap :: Parser , use deeperseeker :: api :: build_router , use deeperseeker :: api :: state :: AppState , use deeperseeker :: cli :: diagnostic :: run_diagnostics , use deeperseeker :: cli :: service :: { install_user_service , service_status , uninstall_user_service } , use deeperseeker :: cli :: token_cmd :: { add_token , edit_token , list_tokens , remove_token , reset_token_usage , test_tokens , } , use deeperseeker :: cli :: usage_cmd :: display_usage , use deeperseeker :: cli :: { Cli , Commands , ServeArgs , ServiceArgs , ServiceSubcommands , TokenArgs , TokenSubcommands , UpdateArgs , } , use deeperseeker :: config :: AppConfig , use deeperseeker :: infra :: db :: { init_db , open_db } , use deeperseeker :: infra :: deepseek_client :: DeepSeekClient , use deeperseeker :: infra :: pow :: PowSolver , use deeperseeker :: tui :: run_status , use std :: collections :: HashMap , use std :: sync :: Arc , use tera :: Tera , use tokio :: net :: TcpListener , use tokio :: sync :: Mutex , use tracing :: info 
 

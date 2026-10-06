@@ -2,6 +2,7 @@ use crate::api::chat_chunks::{
     build_chat_response, build_terminal_chunk, create_openai_chunks, current_timestamp,
     make_reasoning_chunk, make_text_chunk, make_tool_calls_chunk, ChatResponseArgs,
 };
+use crate::api::live_log::{render_input, LogFinish, LogHandle, LogSeed};
 use crate::api::state::AppState;
 use crate::domain::openai::ChatMessage;
 use crate::domain::session::{compute_next_signature, next_parent_id, Session};
@@ -32,6 +33,7 @@ struct StreamState {
     pub streamed_len: usize,
     pub dsml_detected: bool,
     pub upstream_error: Option<String>,
+    pub reasoning: String,
 }
 
 pub async fn handle_streaming_response(
@@ -46,6 +48,13 @@ pub async fn handle_streaming_response(
     let created = current_timestamp();
     let db = state.db.clone();
     let state = state.clone();
+    let log = state.live_log.begin(LogSeed {
+        model: req.model.clone(),
+        token_id: Some(token_id),
+        session_id: session_id.clone(),
+        stream: true,
+        input: render_input(&req.messages),
+    });
 
     let prompt_chars: usize = req.messages.iter().map(|m| m.text_content().len()).sum();
     let prompt_tokens = std::cmp::max(1, (prompt_chars / 4) as u32);
@@ -81,7 +90,7 @@ pub async fn handle_streaming_response(
                             break 'outer;
                         }
                         SseLineResult::Chunks(chunks) => {
-                            for out in process_chunks(chunks, &ctx, &mut stream_state) {
+                            for out in process_chunks(chunks, &ctx, &mut stream_state, &log) {
                                 yield Ok::<_, std::convert::Infallible>(out);
                             }
                         }
@@ -91,7 +100,7 @@ pub async fn handle_streaming_response(
             }
 
             let parsed = parse_dsml(&stream_state.full_content);
-            if let Some(final_chunk) = emit_final_tool_or_text(&ctx, &parsed, &stream_state) {
+            if let Some(final_chunk) = emit_final_tool_or_text(&ctx, &parsed, &stream_state, &log) {
                 yield Ok(final_chunk);
             }
 
@@ -100,6 +109,7 @@ pub async fn handle_streaming_response(
                 if let Some(term) = finalize_stream_session(&db, &req.messages, &ctx, &parsed, ids).await {
                     yield Ok(format!("data: {term}\n\n"));
                 }
+                emit_stream_log_success(&log, &req.messages, cur_parent, prompt_tokens, &stream_state, &parsed);
                 yield Ok("data: [DONE]\n\n".to_string());
                 return;
             }
@@ -138,6 +148,7 @@ pub async fn handle_streaming_response(
                             cur_parent = 0;
                             cur_tok = fresh_prep.token.id;
                             cur_resp = new_resp;
+                            log.reset_output();
                             continue;
                         }
                     }
@@ -148,6 +159,7 @@ pub async fn handle_streaming_response(
             let _ = crate::infra::session_db::delete_sessions_for_chat(&db, cur_tok, &cur_sess).await;
             let err_msg = stream_state
                 .upstream_error
+                .clone()
                 .unwrap_or_else(|| "DeepSeek returned empty completion".to_string());
             let is_rate_limit = err_msg.contains("Too many requests")
                 || err_msg.contains("being generated")
@@ -160,6 +172,7 @@ pub async fn handle_streaming_response(
             let err_obj = serde_json::json!({
                 "error": { "message": err_msg, "type": err_type, "code": err_code }
             });
+            log.fail(err_msg);
             yield Ok(format!("data: {err_obj}\n\n"));
             yield Ok("data: [DONE]\n\n".to_string());
             return;
@@ -176,10 +189,13 @@ fn process_chunks(
     chunks: Vec<ExtractedChunk>,
     ctx: &StreamContext,
     state: &mut StreamState,
+    log: &LogHandle,
 ) -> Vec<String> {
     let mut results = Vec::new();
     for chunk in create_openai_chunks(ctx.chat_id, ctx.created, ctx.model, chunks) {
         if let Some(r) = &chunk.choices[0].delta.reasoning_content {
+            state.reasoning.push_str(r);
+            log.append_reasoning(r);
             let r_chunk = make_reasoning_chunk(ctx.chat_id, ctx.created, ctx.model, r);
             if let Ok(j) = serde_json::to_string(&r_chunk) {
                 results.push(format!("data: {j}\n\n"));
@@ -187,23 +203,28 @@ fn process_chunks(
         }
         if let Some(text) = &chunk.choices[0].delta.content {
             state.full_content.push_str(text);
-            handle_text_chunk(ctx, state, &mut results);
+            handle_text_chunk(ctx, state, &mut results, log);
         }
     }
     results
 }
 
-fn handle_text_chunk(ctx: &StreamContext, state: &mut StreamState, chunks: &mut Vec<String>) {
+fn handle_text_chunk(
+    ctx: &StreamContext,
+    state: &mut StreamState,
+    chunks: &mut Vec<String>,
+    log: &LogHandle,
+) {
     if state.dsml_detected {
         return;
     }
     if let Some(pos) = find_dsml_block_start(&state.full_content) {
         state.dsml_detected = true;
-        emit_text_segment(ctx, state, pos, chunks);
+        emit_text_segment(ctx, state, pos, chunks, log);
         return;
     }
     let safe_len = safe_unambiguous_len(&state.full_content);
-    emit_text_segment(ctx, state, safe_len, chunks);
+    emit_text_segment(ctx, state, safe_len, chunks, log);
 }
 
 fn emit_text_segment(
@@ -211,16 +232,14 @@ fn emit_text_segment(
     state: &mut StreamState,
     target_pos: usize,
     chunks: &mut Vec<String>,
+    log: &LogHandle,
 ) {
     if target_pos <= state.streamed_len {
         return;
     }
-    let chunk = make_text_chunk(
-        ctx.chat_id,
-        ctx.created,
-        ctx.model,
-        &state.full_content[state.streamed_len..target_pos],
-    );
+    let segment = &state.full_content[state.streamed_len..target_pos];
+    let chunk = make_text_chunk(ctx.chat_id, ctx.created, ctx.model, segment);
+    log.append_content(segment);
     if let Ok(json_str) = serde_json::to_string(&chunk) {
         chunks.push(format!("data: {json_str}\n\n"));
     }
@@ -231,6 +250,7 @@ fn emit_final_tool_or_text(
     ctx: &StreamContext,
     parsed: &ParsedDsml,
     state: &StreamState,
+    log: &LogHandle,
 ) -> Option<String> {
     if !parsed.tool_calls.is_empty() {
         let chunk = make_tool_calls_chunk(
@@ -248,6 +268,7 @@ fn emit_final_tool_or_text(
         if cleaned.is_empty() {
             None
         } else {
+            log.append_content(&cleaned);
             let chunk = make_text_chunk(ctx.chat_id, ctx.created, ctx.model, &cleaned);
             serde_json::to_string(&chunk)
                 .ok()
@@ -256,6 +277,30 @@ fn emit_final_tool_or_text(
     } else {
         None
     }
+}
+
+fn emit_stream_log_success(
+    log: &LogHandle,
+    messages: &[ChatMessage],
+    parent_id: i64,
+    prompt_tokens: u32,
+    state: &StreamState,
+    parsed: &ParsedDsml,
+) {
+    let comp_tokens = std::cmp::max(1, (state.full_content.len() / 4) as u32);
+    let cached_tokens = compute_cached_tokens(parent_id, messages, prompt_tokens);
+    let finish_reason = if parsed.tool_calls.is_empty() {
+        "stop"
+    } else {
+        "tool_calls"
+    };
+    log.finish(LogFinish {
+        prompt_tokens,
+        completion_tokens: comp_tokens,
+        cached_tokens,
+        finish_reason: finish_reason.to_string(),
+        tool_calls: parsed.tool_calls.len(),
+    });
 }
 
 async fn finalize_stream_session(
@@ -347,6 +392,14 @@ pub async fn handle_unary_response(
     req_messages: &[ChatMessage],
     upstream_resp: reqwest::Response,
 ) -> Result<Response, (StatusCode, String)> {
+    let log = state.live_log.begin(LogSeed {
+        model: model.clone(),
+        token_id: Some(token_id),
+        session_id: session_id.clone(),
+        stream: false,
+        input: render_input(req_messages),
+    });
+
     let (full_content, full_reasoning) = read_unary_body(upstream_resp).await;
     let (raw_content, reasoning) = finalize_content(&full_content, &full_reasoning);
     let parsed = parse_dsml(&raw_content);
@@ -355,6 +408,7 @@ pub async fn handle_unary_response(
         let _ =
             crate::infra::session_db::delete_sessions_for_chat(&state.db, token_id, &session_id)
                 .await;
+        log.fail("DeepSeek returned empty completion");
         return Err((
             StatusCode::TOO_MANY_REQUESTS,
             "DeepSeek returned empty completion".to_string(),
@@ -394,6 +448,16 @@ pub async fn handle_unary_response(
         Some(token_id),
     )
     .await;
+
+    let tool_count = tool_calls.as_ref().map(|t| t.len()).unwrap_or(0);
+    log.set_output(&content, reasoning.as_deref());
+    log.finish(LogFinish {
+        prompt_tokens,
+        completion_tokens: comp_tokens,
+        cached_tokens,
+        finish_reason: finish_reason.clone(),
+        tool_calls: tool_count,
+    });
 
     let resp = build_chat_response(ChatResponseArgs {
         model: &model,

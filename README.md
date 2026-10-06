@@ -115,7 +115,7 @@ Multi-horizon token telemetry, active upstream token pool status, and diagnostic
 <br>
 
 ### 🎨 Web Administration Dashboard (`/dashboard`)
-Dark-mode administration portal with real-time pool metrics, token management, and usage breakdown:
+Dark-mode administration portal with real-time pool metrics, token management, usage breakdown, and a live SSE tail of individual requests:
 
 <div align="center">
   <img src="assets/web_dashboard.gif" alt="Web Administration Dashboard" width="850px" />
@@ -496,6 +496,7 @@ DEEPSEEKER_SESSION_SECRET="random-32-char-secret"
 - **🔑 In-Browser Token Extraction**: Built-in 1-click button to copy the browser DevTools extraction snippet and add tokens directly without restarting the daemon.
 - **🛡️ Token Pool State Monitor**: Visual badges for token accounts (`ACTIVE`, `RATE_LIMITED`, `COOLDOWN`) with masked keys and one-click revocation.
 - **📊 Granular Usage Breakdown**: Human-readable K/M/B summaries with raw integer hover tooltips across all time horizons.
+- **📡 Live Request Logs**: Server-sent event tail of the last 100 requests showing full input prompt, streamed output, reasoning blocks, token counts, duration, and finish reason in real time.
 
 ---
 

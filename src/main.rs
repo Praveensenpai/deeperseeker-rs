@@ -149,6 +149,7 @@ async fn run_server(args: ServeArgs) -> Result<()> {
     let tera = Arc::new(Tera::new(&template_pattern).context("Failed compiling HTML templates")?);
 
     let in_flight = Arc::new(Mutex::new(HashMap::new()));
+    let live_log = Arc::new(deeperseeker::api::live_log::LiveLog::new());
     let state = AppState {
         config: config.clone(),
         db,
@@ -156,6 +157,7 @@ async fn run_server(args: ServeArgs) -> Result<()> {
         pow_solver,
         in_flight,
         tera,
+        live_log,
     };
 
     let router = build_router(state);
