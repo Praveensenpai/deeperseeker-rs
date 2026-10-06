@@ -144,7 +144,8 @@ async fn run_server(args: ServeArgs) -> Result<()> {
         .await
         .with_context(|| format!("Failed binding TCP listener to {bind_addr}"))?;
 
-    info!("🚀 deeperseeker-rs listening on http://{bind_addr}");
+    let version = env!("CARGO_PKG_VERSION");
+    info!("🚀 deeperseeker-rs v{version} listening on http://{bind_addr}");
     info!("OpenAI Base URL: http://{bind_addr}/v1");
     info!("Dashboard:       http://{bind_addr}/dashboard");
 

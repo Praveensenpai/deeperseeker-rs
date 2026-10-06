@@ -100,7 +100,7 @@
                 <tr>
                     <th style="width: 50px;">ID</th>
                     <th>Alias</th>
-                    <th>Status</th>
+                    <th style="width: 40px; text-align: center;" title="Status">Status</th>
                     <th>Last Used</th>
                     <th>Reqs</th>
                     <th>Input</th>
@@ -116,13 +116,13 @@
                 <tr>
                     <td style="font-family: var(--font-mono); font-weight: 600;">#{{ tok.id }}</td>
                     <td style="font-weight: 500; color: var(--text-primary);">{{ tok.alias | default(value="—") }}</td>
-                    <td>
+                    <td style="text-align: center;">
                         {% if tok.status == "ACTIVE" %}
-                            <span class="badge badge-active">● Active</span>
+                            <span class="status-dot status-active" title="Active"></span>
                         {% elif tok.status == "RATE_LIMITED" %}
-                            <span class="badge badge-limited">▲ Rate Limited</span>
+                            <span class="status-dot status-limited" title="Rate Limited"></span>
                         {% else %}
-                            <span class="badge" style="background: rgba(244,63,94,0.12); color: var(--accent-rose);">○ Suspended</span>
+                            <span class="status-dot status-suspended" title="Suspended"></span>
                         {% endif %}
                     </td>
                     <td style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--text-secondary);" title="{{ tok.last_used_title }}">{{ tok.last_used_ago }}</td>

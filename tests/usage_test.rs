@@ -174,6 +174,7 @@ fn test_dashboard_template_metrics_rendering() {
     ctx.insert("today_cached", &"40.0K");
     ctx.insert("port", &4000);
     ctx.insert("api_key", &"dseeker");
+    ctx.insert("version", &"0.2.26");
 
     let rendered = tera.render("dashboard.html", &ctx).unwrap();
     assert!(rendered.contains("44.9K"));
@@ -189,6 +190,8 @@ fn test_dashboard_template_metrics_rendering() {
     assert!(rendered.contains("58.0%"));
     assert!(rendered.contains("user...9999"));
     assert!(rendered.contains("2m ago"));
+    assert!(rendered.contains("status-dot status-active"));
+    assert!(rendered.contains("title=\"Active\""));
     assert!(rendered.contains("<th>Last Used</th>"));
     assert!(rendered.contains("<th>Input</th>"));
     assert!(rendered.contains("<th>Output</th>"));

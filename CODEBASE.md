@@ -505,7 +505,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
 ### `src/lib.rs` (Role: general, Lines: 6)
 - **Responsibility**: Core general logic in src/lib.rs
 
-### `src/main.rs` (Role: general, Lines: 156)
+### `src/main.rs` (Role: general, Lines: 157)
 - **Responsibility**: Core general logic in src/main.rs
 - **Imports**: use anyhow :: { Context , Result } , use clap :: Parser , use deeperseeker :: api :: build_router , use deeperseeker :: api :: state :: AppState , use deeperseeker :: cli :: diagnostic :: run_diagnostics , use deeperseeker :: cli :: service :: { install_user_service , service_status , uninstall_user_service } , use deeperseeker :: cli :: token_cmd :: { add_token , list_tokens , remove_token , test_tokens } , use deeperseeker :: cli :: usage_cmd :: display_usage , use deeperseeker :: cli :: { Cli , Commands , ServeArgs , ServiceArgs , ServiceSubcommands , TokenArgs , TokenSubcommands , UpdateArgs , } , use deeperseeker :: config :: AppConfig , use deeperseeker :: infra :: db :: { init_db , open_db } , use deeperseeker :: infra :: deepseek_client :: DeepSeekClient , use deeperseeker :: infra :: pow :: PowSolver , use deeperseeker :: tui :: run_status , use std :: collections :: HashMap , use std :: sync :: Arc , use tera :: Tera , use tokio :: net :: TcpListener , use tokio :: sync :: Mutex , use tracing :: info 
 
