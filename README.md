@@ -196,8 +196,10 @@ Inspired by high-performance developer tooling (`sys-chronicle`, Claude CLI, `uv
 | `deeperseeker usage` | Print structured token usage table, daily histogram, and model stats |
 | `deeperseeker token list` | Inspect all tokens in the SQLite pool with masked values and status |
 | `deeperseeker token add <TOKEN>` | Register a new DeepSeek Web Bearer token |
-| `deeperseeker token remove <TOKEN>` | Delete a token from the active pool |
-| `deeperseeker token test` | Test upstream authentication validity across all registered tokens |
+| `deeperseeker token edit <ID> [-t TOKEN] [-a ALIAS]` | Update a token's alias or swap its credential (verified upstream before saving) |
+| `deeperseeker token remove <ID>` | Delete a token and its usage history from the pool |
+| `deeperseeker token reset <ID>` | Clear a token's recorded usage and cached sessions without deleting it |
+| `deeperseeker token test [ID]` | Test upstream authentication validity across all registered tokens |
 | `deeperseeker test` | Execute 4-tier diagnostics: SQLite DB, WASM PoW solver, DeepSeek API, Proxy |
 | `deeperseeker service install` | Generate and enable a systemd user service (`deeperseeker.service`) |
 | `deeperseeker service status` | Query systemd service status |

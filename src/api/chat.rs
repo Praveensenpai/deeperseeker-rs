@@ -4,12 +4,11 @@ use crate::domain::openai::ChatCompletionRequest;
 use crate::domain::session::compute_signature;
 use crate::domain::token::Token;
 use crate::domain::upstream::is_auth_failure;
-use crate::infra::db::{
-    find_session, mark_active, mark_expired, mark_limited, pick_token, touch_token,
-};
+use crate::infra::db::{mark_active, mark_expired, mark_limited, pick_token, touch_token};
 use crate::infra::deepseek_client::CompletionArgs;
 use crate::infra::media::{resolve_message_media, MediaContext};
 use crate::infra::prompt::build_prompt_for_turn;
+use crate::infra::session_db::find_session;
 use axum::{extract::State, http::StatusCode, response::Response, Json};
 use serde_json::json;
 
@@ -142,7 +141,7 @@ async fn execute_completion_attempt(
                     &prep.session_id[..8.min(prep.session_id.len())],
                     e
                 );
-                let _ = crate::infra::db::delete_sessions_for_chat(
+                let _ = crate::infra::session_db::delete_sessions_for_chat(
                     &state.db,
                     token_id,
                     &prep.session_id,

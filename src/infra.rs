@@ -7,6 +7,7 @@ pub mod pacing;
 pub mod pow;
 pub mod prompt;
 pub mod rehome;
+pub mod session_db;
 pub mod sse;
 pub mod usage_db;
 pub mod watchdog;

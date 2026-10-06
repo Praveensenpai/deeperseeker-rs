@@ -1,5 +1,6 @@
 use crate::api::state::AppState;
-use crate::infra::db::{pick_token, record_file};
+use crate::infra::db::pick_token;
+use crate::infra::session_db::record_file;
 use axum::{
     extract::{Multipart, State},
     http::StatusCode,

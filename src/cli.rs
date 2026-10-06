@@ -109,6 +109,13 @@ pub enum TokenSubcommands {
         #[arg(short = 'd', long)]
         db: Option<String>,
     },
+    /// Clear a token's recorded usage history and cached sessions
+    Reset {
+        /// Token ID whose usage should be cleared
+        id: i64,
+        #[arg(short = 'd', long)]
+        db: Option<String>,
+    },
     /// Test token validity against upstream DeepSeek API
     Test {
         /// Optional token ID to test (tests all if omitted)

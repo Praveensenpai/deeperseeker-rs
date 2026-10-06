@@ -95,3 +95,49 @@ fn test_deepseek_api_response_auth_detection() {
     let data = success.extract_data().unwrap();
     assert_eq!(data["key"], "val");
 }
+
+#[tokio::test]
+async fn test_credential_change_wipes_usage() {
+    use deeperseeker::infra::db::{reset_token_usage, update_token};
+    use deeperseeker::infra::usage_db::{get_token_usages, record_usage};
+
+    let db = open_db(":memory:").await.unwrap();
+    init_db(&db).await.unwrap();
+
+    add_token(&db, "tok-old", Some("acct")).await.unwrap();
+    record_usage(&db, "deepseek-chat", 100, 200, 50, Some(1))
+        .await
+        .unwrap();
+    record_usage(&db, "deepseek-chat", 300, 400, 100, Some(1))
+        .await
+        .unwrap();
+    let usages = get_token_usages(&db).await.unwrap();
+    assert_eq!(usages.len(), 1);
+    assert_eq!(usages[0].requests, 2);
+
+    // Alias-only edit must preserve history.
+    update_token(&db, 1, None, Some("renamed"), None)
+        .await
+        .unwrap();
+    assert_eq!(get_token_usages(&db).await.unwrap()[0].requests, 2);
+
+    // Re-applying the same value must not trigger a spurious wipe.
+    update_token(&db, 1, Some("tok-old"), Some("renamed"), Some("ACTIVE"))
+        .await
+        .unwrap();
+    assert_eq!(get_token_usages(&db).await.unwrap()[0].requests, 2);
+
+    // A genuinely different credential wipes the inherited history.
+    update_token(&db, 1, Some("tok-new"), None, Some("ACTIVE"))
+        .await
+        .unwrap();
+    assert!(get_token_usages(&db).await.unwrap().is_empty());
+    let tok = get_tokens(&db).await.unwrap();
+    assert_eq!(tok[0].token, "tok-new");
+    assert_eq!(tok[0].alias.as_deref(), Some("renamed"));
+
+    // Manual reset is idempotent and reports zero once already clean.
+    let (usage, sessions) = reset_token_usage(&db, 1).await.unwrap();
+    assert_eq!(usage, 0);
+    assert_eq!(sessions, 0);
+}

@@ -144,6 +144,31 @@ pub async fn edit_token(
     }
 }
 
+pub async fn reset_token_usage(token_id: i64, db_path: &str) -> Result<()> {
+    let conn = open_db(db_path).await.context("Failed opening database")?;
+    init_db(&conn)
+        .await
+        .context("Failed initializing database")?;
+
+    let exists = get_tokens(&conn)
+        .await
+        .context("Failed retrieving tokens")?
+        .iter()
+        .any(|t| t.id == token_id);
+
+    if !exists {
+        anyhow::bail!("No token with ID #{token_id} found in database.");
+    }
+
+    let (usage, sessions) = crate::infra::db::reset_token_usage(&conn, token_id)
+        .await
+        .context("Failed to reset token usage")?;
+    println!(
+        "✔ Cleared {usage} usage row(s) and {sessions} cached session(s) for token #{token_id}"
+    );
+    Ok(())
+}
+
 pub async fn test_tokens(target_id: Option<i64>, db_path: &str) -> Result<()> {
     let conn = open_db(db_path).await.context("Failed opening database")?;
     let tokens = get_tokens(&conn)

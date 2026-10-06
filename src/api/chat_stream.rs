@@ -5,8 +5,8 @@ use crate::api::chat_chunks::{
 use crate::api::state::AppState;
 use crate::domain::openai::ChatMessage;
 use crate::domain::session::{compute_next_signature, next_parent_id, Session};
-use crate::infra::db::save_session;
 use crate::infra::dsml::{find_dsml_block_start, parse_dsml, safe_unambiguous_len, ParsedDsml};
+use crate::infra::session_db::save_session;
 pub use crate::infra::sse::{
     drain_sse_lines, extract_chunks_from_event, parse_sse_line, ExtractedChunk, SseLineResult,
 };
@@ -124,7 +124,7 @@ pub async fn handle_streaming_response(
                 );
                 let wait_ms = (gap * 1000.0) as u64;
                 tracing::warn!("Retrying with fresh session after {wait_ms}ms...");
-                let _ = crate::infra::db::delete_sessions_for_chat(&db, cur_tok, &cur_sess).await;
+                let _ = crate::infra::session_db::delete_sessions_for_chat(&db, cur_tok, &cur_sess).await;
 
                 let _ = crate::infra::db::mark_limited(&db, cur_tok, state.config.cookie_cooldown).await;
                 let exclude = vec![cur_tok];
@@ -145,7 +145,7 @@ pub async fn handle_streaming_response(
             }
 
             tracing::warn!("Empty stream generation for session {cur_sess}; deleting stale session");
-            let _ = crate::infra::db::delete_sessions_for_chat(&db, cur_tok, &cur_sess).await;
+            let _ = crate::infra::session_db::delete_sessions_for_chat(&db, cur_tok, &cur_sess).await;
             let err_msg = stream_state
                 .upstream_error
                 .unwrap_or_else(|| "DeepSeek returned empty completion".to_string());
@@ -277,7 +277,7 @@ async fn finalize_stream_session(
         .await;
     } else {
         tracing::info!("Rolling over session at parent {parent_id}");
-        let _ = crate::infra::db::delete_sessions_for_chat(db, token_id, &session_id).await;
+        let _ = crate::infra::session_db::delete_sessions_for_chat(db, token_id, &session_id).await;
     }
     let comp_tokens = std::cmp::max(1, (full_len / 4) as u32);
     let cached_tokens = compute_cached_tokens(parent_id, req_messages, prompt_tokens);
@@ -352,7 +352,9 @@ pub async fn handle_unary_response(
     let parsed = parse_dsml(&raw_content);
 
     if raw_content.is_empty() && parsed.tool_calls.is_empty() {
-        let _ = crate::infra::db::delete_sessions_for_chat(&state.db, token_id, &session_id).await;
+        let _ =
+            crate::infra::session_db::delete_sessions_for_chat(&state.db, token_id, &session_id)
+                .await;
         return Err((
             StatusCode::TOO_MANY_REQUESTS,
             "DeepSeek returned empty completion".to_string(),

@@ -719,7 +719,7 @@ dependencies = [
 
 [[package]]
 name = "deeperseeker"
-version = "0.2.31"
+version = "0.2.32"
 dependencies = [
  "anyhow",
  "async-stream",

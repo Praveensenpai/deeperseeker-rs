@@ -1,8 +1,8 @@
 use crate::domain::openai::{ChatMessage, MessageContent};
-use crate::infra::db::record_file;
 use crate::infra::deepseek_client::DeepSeekClient;
 use crate::infra::pow::PowSolver;
 use crate::infra::rehome::rehome_foreign_files;
+use crate::infra::session_db::record_file;
 use anyhow::{anyhow, Context, Result};
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use std::sync::Arc;

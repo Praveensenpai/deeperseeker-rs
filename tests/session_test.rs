@@ -2,7 +2,8 @@ use deeperseeker::domain::openai::{ChatMessage, FunctionCall, ToolCall};
 use deeperseeker::domain::session::{
     compute_next_signature, compute_signature, next_parent_id, Session,
 };
-use deeperseeker::infra::db::{find_session, init_db, open_db, save_session};
+use deeperseeker::infra::db::{init_db, open_db};
+use deeperseeker::infra::session_db::{find_session, save_session};
 
 #[test]
 fn test_signature_computation() {

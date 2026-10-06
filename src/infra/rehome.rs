@@ -1,6 +1,7 @@
-use crate::infra::db::{get_file_token, get_token, record_file};
+use crate::infra::db::get_token;
 use crate::infra::deepseek_client::DeepSeekClient;
 use crate::infra::pow::PowSolver;
+use crate::infra::session_db::{get_file_token, record_file};
 use anyhow::{Context, Result};
 use std::sync::Arc;
 use tokio_rusqlite::Connection;
