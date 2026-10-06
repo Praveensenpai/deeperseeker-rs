@@ -133,10 +133,9 @@ pub async fn add_token(conn: &Connection, token: &str, alias: Option<&str>) -> R
 
 /// Update a token's credentials, alias and/or status.
 ///
-/// Changing the token *value* is a credential swap: the row now represents a
-/// different upstream account. Its recorded usage and cached sessions belong to
-/// the previous account, so they are wiped to stop the new account inheriting
-/// stale totals. Alias-only edits and status flips keep the history intact.
+/// Alias and status are labels only; changing them never touches usage history.
+/// Usage is cleared only when the token is deleted (cascade) or via the
+/// explicit [`reset_token_usage`] action.
 pub async fn update_token(
     conn: &Connection,
     token_id: i64,
@@ -148,23 +147,6 @@ pub async fn update_token(
     let al = alias.map(str::to_string);
     let st = status.map(str::to_string);
     conn.call(move |c| {
-        if let Some(ref new_val) = tok {
-            let changed = c
-                .query_row(
-                    "SELECT token FROM tokens WHERE id = ?1",
-                    params![token_id],
-                    |r| r.get::<_, String>(0),
-                )
-                .map(|cur| cur != *new_val)
-                .unwrap_or(false);
-            if changed {
-                c.execute(
-                    "DELETE FROM request_usage WHERE token_id = ?1",
-                    params![token_id],
-                )?;
-                c.execute("DELETE FROM sessions WHERE token_id = ?1", params![token_id])?;
-            }
-        }
         c.execute(
             "UPDATE tokens SET token = COALESCE(?1, token), alias = COALESCE(?2, alias), status = COALESCE(?3, status) WHERE id = ?4",
             params![tok, al, st, token_id],
@@ -183,8 +165,8 @@ pub async fn update_token(
 }
 
 /// Clear a token's recorded usage and cached sessions. Returns (usage_rows,
-/// session_rows) deleted. Used for manual resets and backfilling history that
-/// predates the automatic credential-change wipe.
+/// session_rows) deleted. Manual counterpart to the cascade that runs when a
+/// token is deleted, for resetting a token in place.
 pub async fn reset_token_usage(conn: &Connection, token_id: i64) -> Result<(u64, u64)> {
     conn.call(move |c| {
         let usage = c.execute(

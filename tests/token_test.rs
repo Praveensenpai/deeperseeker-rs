@@ -97,7 +97,7 @@ fn test_deepseek_api_response_auth_detection() {
 }
 
 #[tokio::test]
-async fn test_credential_change_wipes_usage() {
+async fn test_usage_clears_on_delete_not_edit() {
     use deeperseeker::infra::db::{reset_token_usage, update_token};
     use deeperseeker::infra::usage_db::{get_token_usages, record_usage};
 
@@ -111,33 +111,36 @@ async fn test_credential_change_wipes_usage() {
     record_usage(&db, "deepseek-chat", 300, 400, 100, Some(1))
         .await
         .unwrap();
-    let usages = get_token_usages(&db).await.unwrap();
-    assert_eq!(usages.len(), 1);
-    assert_eq!(usages[0].requests, 2);
+    assert_eq!(get_token_usages(&db).await.unwrap()[0].requests, 2);
 
-    // Alias-only edit must preserve history.
+    // Alias is just a label: editing it must not touch usage history.
     update_token(&db, 1, None, Some("renamed"), None)
         .await
         .unwrap();
     assert_eq!(get_token_usages(&db).await.unwrap()[0].requests, 2);
 
-    // Re-applying the same value must not trigger a spurious wipe.
-    update_token(&db, 1, Some("tok-old"), Some("renamed"), Some("ACTIVE"))
-        .await
-        .unwrap();
-    assert_eq!(get_token_usages(&db).await.unwrap()[0].requests, 2);
-
-    // A genuinely different credential wipes the inherited history.
+    // Swapping the credential also keeps history; only delete clears it.
     update_token(&db, 1, Some("tok-new"), None, Some("ACTIVE"))
         .await
         .unwrap();
-    assert!(get_token_usages(&db).await.unwrap().is_empty());
+    assert_eq!(get_token_usages(&db).await.unwrap()[0].requests, 2);
     let tok = get_tokens(&db).await.unwrap();
     assert_eq!(tok[0].token, "tok-new");
     assert_eq!(tok[0].alias.as_deref(), Some("renamed"));
 
-    // Manual reset is idempotent and reports zero once already clean.
+    // Manual reset clears usage and cached sessions without deleting the token.
     let (usage, sessions) = reset_token_usage(&db, 1).await.unwrap();
-    assert_eq!(usage, 0);
+    assert_eq!(usage, 2);
     assert_eq!(sessions, 0);
+    assert!(get_token_usages(&db).await.unwrap().is_empty());
+    assert_eq!(get_tokens(&db).await.unwrap().len(), 1);
+
+    // Deleting the token cascades its usage away.
+    record_usage(&db, "deepseek-chat", 10, 20, 5, Some(1))
+        .await
+        .unwrap();
+    assert_eq!(get_token_usages(&db).await.unwrap()[0].requests, 1);
+    delete_token(&db, 1).await.unwrap();
+    assert!(get_token_usages(&db).await.unwrap().is_empty());
+    assert!(get_tokens(&db).await.unwrap().is_empty());
 }

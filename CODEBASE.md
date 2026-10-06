@@ -369,7 +369,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn resolve_db_path (custom : Option < & str >) -> String
   ```
 
-### `src/infra/db.rs` (Role: infra, Lines: 376)
+### `src/infra/db.rs` (Role: infra, Lines: 358)
 - **Responsibility**: Core infra logic in src/infra/db.rs
 - **Imports**: use crate :: domain :: token :: Token , use anyhow :: { Context , Result } , use rusqlite :: params , use std :: collections :: HashMap , use std :: time :: { SystemTime , UNIX_EPOCH } , use tokio_rusqlite :: Connection 
 - **Public Functions & Signatures**:
