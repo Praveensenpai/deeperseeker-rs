@@ -12,7 +12,7 @@
 *Ultra-low latency, memory-efficient reverse proxy bridging DeepSeek's Web API to OpenAI and Claude compatible endpoints.*  
 *Rust rewrite of [DeeperSeeker](https://github.com/AmanCode22/deeperseeker) by [AmanCode22](https://github.com/AmanCode22).*
 
-[⚡ Quick Start](#-quick-start) • [🐳 Docker](#-docker-deployment) • [✨ Key Features](#-key-features) • [⚡ Why Rust?](#-why-deeperseeker-rs-rust-vs-python) • [🎥 Showcase](#-usage-showcase) • [🎨 Web Dashboard](#-web-administration-dashboard) • [🔑 DeepSeek Token Setup](#-deepseek-token-setup) • [💻 CLI Ergonomics](#-cli-ergonomics) • [📊 Token Usage Analytics](#-token-usage-analytics) • [🏛️ Architecture](#%EF%B8%8F-architecture) • [🔌 API & Demos](#-api-usage) • [⚠️ Disclaimer](#%EF%B8%8F-disclaimer) • [🙏 Credits](#-acknowledgements--credits)
+[⚡ Quick Start](#-quick-start) • [🐳 Docker](#-docker-deployment) • [✨ Key Features](#-key-features) • [⚡ Why Rust?](#-why-deeperseeker-rs-rust-vs-python) • [🎥 Showcase](#-usage-showcase) • [🎨 Web Dashboard](#-web-administration-dashboard) • [🔑 DeepSeek Token Setup](#-deepseek-token-setup) • [💻 CLI Ergonomics](#-cli-ergonomics) • [📊 Token Usage Analytics](#-token-usage-analytics) • [🛠️ Admin API](#%EF%B8%8F-token-pool-admin-api) • [🏛️ Architecture](#%EF%B8%8F-architecture) • [🔌 API & Demos](#-api-usage) • [⚠️ Disclaimer](#%EF%B8%8F-disclaimer) • [🙏 Credits](#-acknowledgements--credits)
 
 </div>
 
@@ -168,6 +168,7 @@ Or paste it into the Web Dashboard at `http://localhost:4000/dashboard`.
 - 🖥️ **Interactive TUI & CLI**: Multi-view Ratatui terminal dashboard, end-to-end diagnostics, and systemd service management.
 - 🎨 **Minimal Web Dashboard**: Modern dark-mode interface built with clean typography, live stats, and one-click token copy.
 - 🔑 **Per-Client API Keys & Quotas**: Issue hashed downstream keys with rolling-window token quotas, managed from the dashboard (plaintext shown once).
+- 🛠️ **Programmatic Token Pool API**: Full JSON CRUD for the upstream pool at `/api/admin/*` — list, add, swap, verify, reset, and delete tokens from scripts, cron, or CI.
 - 📈 **Prometheus Metrics**: Hand-rolled `/metrics` exposition for tokens, in-flight requests, and success/error/rate-limit counters.
 - 🧮 **Real DeepSeek Tokenizer**: Exact token accounting via the bundled HuggingFace `tokenizer.json`, with a heuristic fallback if the asset is missing.
 - 🧹 **Retention & Cleanup**: Configurable automatic pruning of stale sessions and usage history to keep SQLite lean.
@@ -349,6 +350,99 @@ The master `DEEPSEEKER_API_KEY` grants unlimited access. To issue a quota-limite
 - Each key has an optional **rolling-window token quota** (per day / week / month / all time); `0` means unlimited.
 - Exhausted keys receive `429 Too Many Requests` with a `Retry-After` header.
 - Keys can be revoked or deleted at any time from the dashboard.
+
+### 🛠️ Token Pool Admin API
+
+Manage the upstream DeepSeek token pool programmatically over JSON. Every route requires the master `DEEPSEEKER_API_KEY` as a `Bearer` token; per-client keys are rejected. Raw credentials are never returned — reads expose only the masked form.
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/admin/pool` | Pool summary: total, active, rate-limited, expired, in-flight |
+| `GET` | `/api/admin/tokens` | List all tokens (masked) with aggregated usage |
+| `GET` | `/api/admin/tokens/{id}` | Single token detail |
+| `POST` | `/api/admin/tokens` | Add a token (`auth_token`, optional `alias`) |
+| `PATCH` | `/api/admin/tokens/{id}` | Update alias and/or swap credential (verified upstream) |
+| `DELETE` | `/api/admin/tokens/{id}` | Delete token + cascade sessions/usage |
+| `POST` | `/api/admin/tokens/{id}/verify` | Probe upstream, set `ACTIVE` or `EXPIRED` |
+| `POST` | `/api/admin/tokens/{id}/reset` | Clear usage history + cached sessions |
+| `POST` | `/api/admin/tokens/{id}/status` | Force status (`ACTIVE` or `EXPIRED`) |
+
+```bash
+AUTH="Authorization: Bearer $DEEPSEEKER_API_KEY"
+BASE="http://127.0.0.1:4000"
+```
+
+#### 🔍 Inspect the pool
+
+```bash
+# Summary counters: total / active / rate_limited / expired / in_flight
+curl -s $BASE/api/admin/pool -H "$AUTH"
+# {"status":"ok","pool":{"total":2,"active":1,"rate_limited":1,"expired":0,"in_flight":3}}
+
+# Every token (masked) with aggregated usage
+curl -s $BASE/api/admin/tokens -H "$AUTH"
+# {"status":"ok","tokens":[{"id":1,"alias":"primary","masked_token":"eyJhbGciOiJI…7890",
+#   "status":"ACTIVE","usage":{"requests":42,"total_tokens":184320}}]}
+
+# One token by id
+curl -s $BASE/api/admin/tokens/1 -H "$AUTH"
+```
+
+#### ➕ Add & update
+
+```bash
+# Add — surrounding quotes/whitespace are trimmed automatically
+curl -s -X POST $BASE/api/admin/tokens -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"auth_token": "ey...", "alias": "primary"}'
+
+# Rename only (no upstream call)
+curl -s -X PATCH $BASE/api/admin/tokens/1 -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"alias": "backup"}'
+
+# Swap the credential — verified upstream before saving, else 502 + marked EXPIRED
+curl -s -X PATCH $BASE/api/admin/tokens/1 -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"auth_token": "ey-new..."}'
+```
+
+#### 🩺 Health, status & cleanup
+
+```bash
+# Probe upstream validity → ACTIVE or EXPIRED
+curl -s -X POST $BASE/api/admin/tokens/1/verify -H "$AUTH"
+
+# Force status (ACTIVE | EXPIRED)
+curl -s -X POST $BASE/api/admin/tokens/1/status -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"status": "active"}'
+
+# Clear usage history + cached sessions, keep the token
+curl -s -X POST $BASE/api/admin/tokens/1/reset -H "$AUTH"
+
+# Delete the token and cascade its usage/sessions
+curl -s -X DELETE $BASE/api/admin/tokens/1 -H "$AUTH"
+```
+
+#### 🐍 Scripted workflow
+
+Verify every token and retire the dead ones — run it from cron or CI:
+
+```bash
+AUTH="Authorization: Bearer $DEEPSEEKER_API_KEY"
+BASE="http://127.0.0.1:4000"
+for id in $(curl -s $BASE/api/admin/tokens -H "$AUTH" | jq -r '.tokens[].id'); do
+  curl -s -X POST $BASE/api/admin/tokens/$id/verify -H "$AUTH"
+done
+```
+
+All responses are JSON. Errors use `{"error": {"message", "type"}}`:
+
+| Status | Meaning |
+| :--- | :--- |
+| `401` | Missing or invalid master key (client keys are rejected) |
+| `400` | Bad input (empty `auth_token`, unknown `status`) |
+| `404` | Token id not found |
+| `502` | Credential swap failed upstream verification |
+
+Credentials are never echoed back — reads expose only the masked form.
 
 ---
 

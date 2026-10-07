@@ -136,7 +136,7 @@ pub async fn verify_token(
     }
 }
 
-async fn verify_upstream(state: &AppState, token: &str) -> bool {
+pub(crate) async fn verify_upstream(state: &AppState, token: &str) -> bool {
     match state
         .client
         .create_pow_challenge(token, "/api/v0/chat/completion")

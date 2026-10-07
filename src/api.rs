@@ -1,3 +1,4 @@
+pub mod admin;
 pub mod anthropic;
 pub mod chat;
 pub mod chat_chunks;
@@ -17,6 +18,12 @@ pub mod state;
 pub mod token_admin;
 pub mod usage;
 
+use crate::api::admin::{
+    add_token as admin_add_token, delete_token as admin_delete_token, get_pool,
+    get_token as admin_get_token, list_tokens as admin_list_tokens, require_admin_key,
+    reset_token as admin_reset_token, set_status as admin_set_status,
+    update_token as admin_update_token, verify_token as admin_verify_token,
+};
 use crate::api::anthropic::anthropic_messages;
 use crate::api::chat::chat_completions;
 use crate::api::client_key_admin::{add_client_key, delete_client_key, revoke_client_key};
@@ -46,6 +53,23 @@ pub fn build_router(state: AppState) -> Router {
         .route("/v1/files/upload", post(upload_file_anthropic))
         .route_layer(from_fn_with_state(state.clone(), require_api_key));
 
+    let admin_routes = Router::new()
+        .route("/api/admin/pool", get(get_pool))
+        .route(
+            "/api/admin/tokens",
+            get(admin_list_tokens).post(admin_add_token),
+        )
+        .route(
+            "/api/admin/tokens/{id}",
+            get(admin_get_token)
+                .patch(admin_update_token)
+                .delete(admin_delete_token),
+        )
+        .route("/api/admin/tokens/{id}/verify", post(admin_verify_token))
+        .route("/api/admin/tokens/{id}/reset", post(admin_reset_token))
+        .route("/api/admin/tokens/{id}/status", post(admin_set_status))
+        .route_layer(from_fn_with_state(state.clone(), require_admin_key));
+
     let public_routes = Router::new()
         .route("/", get(root))
         .route("/health", get(health))
@@ -69,6 +93,7 @@ pub fn build_router(state: AppState) -> Router {
 
     Router::new()
         .merge(api_routes)
+        .merge(admin_routes)
         .merge(public_routes)
         .nest_service(
             "/static",

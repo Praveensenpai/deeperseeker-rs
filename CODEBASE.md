@@ -15,6 +15,30 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
 
 ## 3. Module & Interface Skeleton
 
+### `src/api/admin.rs` (Role: api, Lines: 312)
+- **Responsibility**: Core api logic in src/api/admin.rs
+- **Imports**: use crate :: api :: state :: AppState , use crate :: api :: token_admin :: verify_upstream , use crate :: domain :: token :: Token , use crate :: domain :: usage :: TokenUsage , use crate :: infra :: db :: { add_token as db_add_token , delete_token as db_delete_token , get_token as db_get_token , get_tokens , mark_active as db_mark_active , mark_expired as db_mark_expired , reset_token_usage as db_reset_token_usage , update_token as db_update_token , } , use crate :: infra :: usage_db :: get_token_usages , use axum :: { extract :: { Path , Request , State } , http :: { header :: AUTHORIZATION , StatusCode } , middleware :: Next , response :: { IntoResponse , Response } , Json , } , use serde :: { Deserialize , Serialize } , use serde_json :: json , use std :: collections :: HashMap 
+- **Types & Enums**:
+  ```rust
+  pub struct TokenView
+  pub struct AddTokenBody
+  pub struct UpdateTokenBody
+  pub struct StatusBody
+  ```
+- **Public Functions & Signatures**:
+  ```rust
+  async fn require_admin_key (State (state) : State < AppState > , req : Request , next : Next ,) -> Response
+  async fn get_pool (State (state) : State < AppState >) -> ApiResult
+  async fn list_tokens (State (state) : State < AppState >) -> ApiResult
+  async fn get_token (State (state) : State < AppState > , Path (id) : Path < i64 >) -> ApiResult
+  async fn add_token (State (state) : State < AppState > , Json (body) : Json < AddTokenBody >) -> ApiResult
+  async fn update_token (State (state) : State < AppState > , Path (id) : Path < i64 > , Json (body) : Json < UpdateTokenBody > ,) -> ApiResult
+  async fn delete_token (State (state) : State < AppState > , Path (id) : Path < i64 >) -> ApiResult
+  async fn verify_token (State (state) : State < AppState > , Path (id) : Path < i64 >) -> ApiResult
+  async fn reset_token (State (state) : State < AppState > , Path (id) : Path < i64 >) -> ApiResult
+  async fn set_status (State (state) : State < AppState > , Path (id) : Path < i64 > , Json (body) : Json < StatusBody > ,) -> ApiResult
+  ```
+
 ### `src/api/anthropic.rs` (Role: api, Lines: 147)
 - **Responsibility**: Core api logic in src/api/anthropic.rs
 - **Imports**: use crate :: api :: chat :: chat_completions , use crate :: api :: middleware :: ClientAuth , use crate :: api :: state :: AppState , use crate :: domain :: anthropic :: { AnthropicBlock , AnthropicContent , AnthropicMessage , AnthropicMessageRequest , AnthropicMessageResponse , AnthropicUsage , } , use crate :: domain :: openai :: { ChatCompletionRequest , ChatCompletionResponse , ChatMessage , ContentPart , MessageContent , } , use axum :: { extract :: { Extension , State } , http :: StatusCode , response :: { IntoResponse , Response } , Json , } , use serde_json :: json 
@@ -230,9 +254,9 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn get_usage_metrics (State (state) : State < AppState > , Query (query) : Query < UsageQuery > ,) -> impl IntoResponse
   ```
 
-### `src/api.rs` (Role: api, Lines: 79)
+### `src/api.rs` (Role: api, Lines: 104)
 - **Responsibility**: Core api logic in src/api.rs
-- **Imports**: use crate :: api :: anthropic :: anthropic_messages , use crate :: api :: chat :: chat_completions , use crate :: api :: client_key_admin :: { add_client_key , delete_client_key , revoke_client_key } , use crate :: api :: dashboard :: { logout , show_dashboard , show_login , submit_login } , use crate :: api :: files :: { upload_file_anthropic , upload_file_openai } , use crate :: api :: health :: { health , root } , use crate :: api :: logs :: { get_logs , stream_logs } , use crate :: api :: metrics :: get_metrics , use crate :: api :: middleware :: require_api_key , use crate :: api :: models :: list_models , use crate :: api :: state :: AppState , use crate :: api :: token_admin :: { add_token , delete_token , edit_token , verify_token } , use crate :: api :: usage :: get_usage_metrics , use axum :: { middleware :: from_fn_with_state , routing :: { get , post } , Router , } , use tower_http :: cors :: CorsLayer , use tower_http :: services :: ServeDir 
+- **Imports**: use crate :: api :: admin :: { add_token as admin_add_token , delete_token as admin_delete_token , get_pool , get_token as admin_get_token , list_tokens as admin_list_tokens , require_admin_key , reset_token as admin_reset_token , set_status as admin_set_status , update_token as admin_update_token , verify_token as admin_verify_token , } , use crate :: api :: anthropic :: anthropic_messages , use crate :: api :: chat :: chat_completions , use crate :: api :: client_key_admin :: { add_client_key , delete_client_key , revoke_client_key } , use crate :: api :: dashboard :: { logout , show_dashboard , show_login , submit_login } , use crate :: api :: files :: { upload_file_anthropic , upload_file_openai } , use crate :: api :: health :: { health , root } , use crate :: api :: logs :: { get_logs , stream_logs } , use crate :: api :: metrics :: get_metrics , use crate :: api :: middleware :: require_api_key , use crate :: api :: models :: list_models , use crate :: api :: state :: AppState , use crate :: api :: token_admin :: { add_token , delete_token , edit_token , verify_token } , use crate :: api :: usage :: get_usage_metrics , use axum :: { middleware :: from_fn_with_state , routing :: { get , post } , Router , } , use tower_http :: cors :: CorsLayer , use tower_http :: services :: ServeDir 
 - **Public Functions & Signatures**:
   ```rust
   fn build_router (state : AppState) -> Router
