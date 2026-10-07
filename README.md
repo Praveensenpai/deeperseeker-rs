@@ -167,6 +167,11 @@ Or paste it into the Web Dashboard at `http://localhost:4000/dashboard`.
 - 📊 **Usage Analytics Engine**: Token tracking across Today, Yesterday, This Week, Month, Year, and All-Time with K/M/B formatting.
 - 🖥️ **Interactive TUI & CLI**: Multi-view Ratatui terminal dashboard, end-to-end diagnostics, and systemd service management.
 - 🎨 **Minimal Web Dashboard**: Modern dark-mode interface built with clean typography, live stats, and one-click token copy.
+- 🔑 **Per-Client API Keys & Quotas**: Issue hashed downstream keys with rolling-window token quotas, managed from the dashboard (plaintext shown once).
+- 📈 **Prometheus Metrics**: Hand-rolled `/metrics` exposition for tokens, in-flight requests, and success/error/rate-limit counters.
+- 🧮 **Real DeepSeek Tokenizer**: Exact token accounting via the bundled HuggingFace `tokenizer.json`, with a heuristic fallback if the asset is missing.
+- 🧹 **Retention & Cleanup**: Configurable automatic pruning of stale sessions and usage history to keep SQLite lean.
+- 🛡️ **Hardened Upstream Calls**: Separate connect/read timeouts, graceful shutdown on SIGINT/SIGTERM, and `Retry-After` on 429 responses.
 
 ---
 
@@ -310,6 +315,40 @@ curl http://127.0.0.1:4000/v1/usage -H "Authorization: Bearer dseeker"
 | `DEEPSEEKER_ADMIN_PASS` | `admin` | Web dashboard password |
 | `DEEPSEEKER_DB_PATH` | `deeperseeker.db` | SQLite database file path |
 | `DEEPSEEKER_WASM_PATH` | `wasm/deepseek_pow_solver.wasm` | Path to PoW WebAssembly solver |
+| `DEEPSEEKER_TOKEN_CONCURRENCY` | `8` | Max concurrent in-flight requests per token |
+| `DEEPSEEKER_COOKIE_COOLDOWN` | `20` | Cooldown seconds after a rate-limited token |
+| `DEEPSEEKER_REQUEST_GAP` | `5.0` | Base pacing gap (seconds) between upstream calls |
+| `DEEPSEEKER_REQUEST_GAP_JITTER` | `2.0` | Random jitter added to the pacing gap |
+| `DEEPSEEKER_HUMAN_PAUSE_CHANCE` | `0.05` | Probability of an extra human-like pause |
+| `DEEPSEEKER_HUMAN_PAUSE_MAX` | `10.0` | Maximum extra pause duration (seconds) |
+| `DEEPSEEKER_SUSPEND_PROBE_INTERVAL_HOURS` | `6` | Interval for probing suspended tokens |
+| `DEEPSEEKER_UPSTREAM_TIMEOUT_SECS` | `300` | Per-read upstream timeout (streaming-safe) |
+| `DEEPSEEKER_UPSTREAM_CONNECT_TIMEOUT_SECS` | `15` | Upstream TCP connect timeout |
+| `DEEPSEEKER_SESSION_RETENTION_DAYS` | `30` | Days to keep cached sessions (`0` = keep forever) |
+| `DEEPSEEKER_USAGE_RETENTION_DAYS` | `0` | Days to keep usage rows (`0` = keep forever) |
+
+---
+
+## 📈 Observability & Client Keys
+
+### Prometheus Metrics
+
+The public `/metrics` endpoint exposes Prometheus text exposition:
+
+```bash
+curl http://127.0.0.1:4000/metrics
+```
+
+Series include `deeperseeker_up`, `deeperseeker_build_info`, `deeperseeker_tokens_total`, `deeperseeker_tokens_active`, `deeperseeker_in_flight_requests`, `deeperseeker_requests_total`, `deeperseeker_requests_success_total`, `deeperseeker_requests_error_total`, and `deeperseeker_requests_rate_limited_total`.
+
+### Per-Client API Keys
+
+The master `DEEPSEEKER_API_KEY` grants unlimited access. To issue a quota-limited key, open the dashboard and use the **Client API Keys** card:
+
+- Keys are shown **once** at creation and stored only as SHA-256 hashes.
+- Each key has an optional **rolling-window token quota** (per day / week / month / all time); `0` means unlimited.
+- Exhausted keys receive `429 Too Many Requests` with a `Retry-After` header.
+- Keys can be revoked or deleted at any time from the dashboard.
 
 ---
 

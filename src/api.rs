@@ -2,28 +2,33 @@ pub mod anthropic;
 pub mod chat;
 pub mod chat_chunks;
 pub mod chat_stream;
+pub mod chat_support;
+pub mod chat_unary;
+pub mod client_key_admin;
 pub mod dashboard;
 pub mod files;
 pub mod health;
 pub mod live_log;
 pub mod logs;
+pub mod metrics;
 pub mod middleware;
 pub mod models;
 pub mod state;
+pub mod token_admin;
 pub mod usage;
 
 use crate::api::anthropic::anthropic_messages;
 use crate::api::chat::chat_completions;
-use crate::api::dashboard::{
-    add_token, delete_token, edit_token, logout, show_dashboard, show_login, submit_login,
-    verify_token,
-};
+use crate::api::client_key_admin::{add_client_key, delete_client_key, revoke_client_key};
+use crate::api::dashboard::{logout, show_dashboard, show_login, submit_login};
 use crate::api::files::{upload_file_anthropic, upload_file_openai};
 use crate::api::health::{health, root};
 use crate::api::logs::{get_logs, stream_logs};
+use crate::api::metrics::get_metrics;
 use crate::api::middleware::require_api_key;
 use crate::api::models::list_models;
 use crate::api::state::AppState;
+use crate::api::token_admin::{add_token, delete_token, edit_token, verify_token};
 use crate::api::usage::get_usage_metrics;
 use axum::{
     middleware::from_fn_with_state,
@@ -44,6 +49,7 @@ pub fn build_router(state: AppState) -> Router {
     let public_routes = Router::new()
         .route("/", get(root))
         .route("/health", get(health))
+        .route("/metrics", get(get_metrics))
         .route("/models", get(list_models))
         .route("/v1/models", get(list_models))
         .route("/v1/usage", get(get_usage_metrics))
@@ -56,7 +62,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/tokens/add", post(add_token))
         .route("/tokens/{token_id}/edit", post(edit_token))
         .route("/tokens/{token_id}/verify", post(verify_token))
-        .route("/tokens/{token_id}/delete", post(delete_token));
+        .route("/tokens/{token_id}/delete", post(delete_token))
+        .route("/client-keys/add", post(add_client_key))
+        .route("/client-keys/{id}/revoke", post(revoke_client_key))
+        .route("/client-keys/{id}/delete", post(delete_client_key));
 
     Router::new()
         .merge(api_routes)

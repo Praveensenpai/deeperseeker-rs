@@ -7,7 +7,7 @@ use std::time::Instant;
 use tokio::sync::broadcast;
 
 /// Number of requests kept in the in-memory ring buffer.
-const LOG_CAPACITY: usize = 100;
+const LOG_CAPACITY: usize = 10;
 /// Broadcast channel depth. Generous enough that slow SSE clients lag, not drop.
 const BROADCAST_CAPACITY: usize = 512;
 

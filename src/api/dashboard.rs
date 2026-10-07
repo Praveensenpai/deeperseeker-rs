@@ -1,13 +1,11 @@
 use crate::api::state::AppState;
+use crate::domain::client_key::ClientKey;
 use crate::domain::token::Token;
 use crate::domain::usage::{format_metric, TokenUsage};
-use crate::infra::db::{
-    add_token as db_add_token, delete_token as db_delete_token, get_token as db_get_token,
-    get_tokens, mark_active as db_mark_active, mark_expired as db_mark_expired, now_timestamp,
-    update_token as db_update_token,
-};
+use crate::infra::client_keys::{list_client_keys, window_usage_tokens};
+use crate::infra::db::{get_tokens, now_timestamp};
 use axum::{
-    extract::{Form, Path, Query, State},
+    extract::{Form, Query, State},
     http::{
         header::{COOKIE, SET_COOKIE},
         HeaderMap, StatusCode,
@@ -26,21 +24,24 @@ pub struct LoginForm {
 }
 
 #[derive(Deserialize)]
-pub struct AddTokenForm {
-    pub auth_token: String,
-    pub alias: Option<String>,
-}
-
-#[derive(Deserialize)]
-pub struct EditTokenForm {
-    pub auth_token: Option<String>,
-    pub alias: Option<String>,
-}
-
-#[derive(Deserialize)]
 pub struct MsgQuery {
     pub msg: Option<String>,
     pub ok: Option<String>,
+    #[serde(default)]
+    pub new_key: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct DashboardClientKeyView {
+    pub id: i64,
+    pub name: String,
+    pub key_prefix: String,
+    pub quota: String,
+    pub window: String,
+    pub used: String,
+    pub used_pct: u64,
+    pub revoked: bool,
+    pub last_used: String,
 }
 
 #[derive(Serialize)]
@@ -134,6 +135,8 @@ pub async fn show_dashboard(
     let in_flight_count: usize = in_flight_map.values().sum();
 
     let views = build_token_views(tokens, &token_usages);
+    let client_keys = list_client_keys(&state.db).await.unwrap_or_default();
+    let client_key_views = build_client_key_views(&client_keys, &state.db).await;
     let today_sum = summaries.iter().find(|s| s.period == "Today");
     let (cache_hit_rate, today_cached) = match today_sum {
         Some(t) => (
@@ -146,6 +149,7 @@ pub async fn show_dashboard(
 
     let mut ctx = Context::new();
     ctx.insert("tokens", &views);
+    ctx.insert("client_keys", &client_key_views);
     ctx.insert("summaries", &summary_views);
     ctx.insert("active_count", &active_count);
     ctx.insert("total_tokens_count", &views.len());
@@ -155,6 +159,7 @@ pub async fn show_dashboard(
     ctx.insert("version", env!("CARGO_PKG_VERSION"));
     ctx.insert("port", &state.config.port);
     ctx.insert("api_key", &state.config.api_key);
+    ctx.insert("new_key", &query.new_key);
     ctx.insert("flash_msg", &query.msg);
     ctx.insert("flash_ok", &(query.ok.as_deref() == Some("1")));
     let rendered = state
@@ -258,139 +263,51 @@ fn build_token_views(tokens: Vec<Token>, usages: &[TokenUsage]) -> Vec<Dashboard
         .collect()
 }
 
-pub async fn add_token(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Form(form): Form<AddTokenForm>,
-) -> Response {
-    if !is_authenticated(&state, &headers) {
-        return Redirect::to("/login").into_response();
+async fn build_client_key_views(
+    keys: &[ClientKey],
+    db: &tokio_rusqlite::Connection,
+) -> Vec<DashboardClientKeyView> {
+    let now = now_timestamp();
+    let mut views = Vec::with_capacity(keys.len());
+    for key in keys {
+        let used = window_usage_tokens(db, key.id, key.window_secs)
+            .await
+            .unwrap_or(0);
+        let (quota, used_pct) = if key.quota_tokens == 0 {
+            ("Unlimited".to_string(), 0)
+        } else {
+            let pct = used.saturating_mul(100) / key.quota_tokens.max(1);
+            (format_metric(key.quota_tokens, false), pct.min(100))
+        };
+        let (last_used, _) = format_relative_time(key.last_used, now);
+        views.push(DashboardClientKeyView {
+            id: key.id,
+            name: key.name.clone(),
+            key_prefix: format!("{}…", key.key_prefix),
+            quota,
+            window: key.window_label(),
+            used: format_metric(used, false),
+            used_pct,
+            revoked: key.revoked,
+            last_used,
+        });
     }
-
-    let token = form.auth_token.trim().trim_matches('"').trim_matches('\'');
-    let alias = form
-        .alias
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty());
-
-    if !token.is_empty() {
-        let _ = db_add_token(&state.db, token, alias).await;
-    }
-
-    Redirect::to("/dashboard").into_response()
+    views
 }
 
-pub async fn delete_token(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(token_id): Path<i64>,
-) -> Response {
-    if !is_authenticated(&state, &headers) {
-        return Redirect::to("/login").into_response();
-    }
-
-    let _ = db_delete_token(&state.db, token_id).await;
-    Redirect::to("/dashboard").into_response()
-}
-
-pub async fn edit_token(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(token_id): Path<i64>,
-    Form(form): Form<EditTokenForm>,
-) -> Response {
-    if !is_authenticated(&state, &headers) {
-        return Redirect::to("/login").into_response();
-    }
-
-    let alias = form
-        .alias
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(str::to_string);
-
-    let candidate = form
-        .auth_token
-        .as_deref()
-        .map(str::trim)
-        .map(|s| s.trim_matches('"').trim_matches('\''))
-        .filter(|s| !s.is_empty())
-        .map(str::to_string);
-
-    // Alias-only change: no verification needed.
-    let Some(new_token) = candidate else {
-        let _ = db_update_token(&state.db, token_id, None, alias.as_deref(), None).await;
-        return redirect_msg("Alias updated", true);
-    };
-
-    if !verify_upstream(&state, &new_token).await {
-        // Reject the token value: keep existing credentials, mark EXPIRED.
-        let _ = db_update_token(&state.db, token_id, None, alias.as_deref(), Some("EXPIRED")).await;
-        return redirect_msg("Token rejected: upstream verification failed", false);
-    }
-
-    if db_update_token(
-        &state.db,
-        token_id,
-        Some(&new_token),
-        alias.as_deref(),
-        Some("ACTIVE"),
-    )
-    .await
-    .is_err()
-    {
-        return redirect_msg("Failed to save token", false);
-    }
-    redirect_msg("Token updated and verified", true)
-}
-
-pub async fn verify_token(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(token_id): Path<i64>,
-) -> Response {
-    if !is_authenticated(&state, &headers) {
-        return Redirect::to("/login").into_response();
-    }
-
-    let Ok(Some(tok)) = db_get_token(&state.db, token_id).await else {
-        return redirect_msg("Token not found", false);
-    };
-
-    if verify_upstream(&state, &tok.token).await {
-        let _ = db_mark_active(&state.db, token_id).await;
-        redirect_msg("Token verified: ACTIVE", true)
-    } else {
-        let _ = db_mark_expired(&state.db, token_id).await;
-        redirect_msg("Token verification failed: marked EXPIRED", false)
-    }
-}
-
-async fn verify_upstream(state: &AppState, token: &str) -> bool {
-    match state
-        .client
-        .create_pow_challenge(token, "/api/v0/chat/completion")
-        .await
-    {
-        Ok(_) => true,
-        Err(e) => {
-            tracing::warn!("Token verification failed: {e:#}");
-            false
-        }
-    }
-}
-
-fn redirect_msg(msg: &str, ok: bool) -> Response {
-    let encoded: String = msg
+pub(crate) fn encode_component(value: &str) -> String {
+    value
         .chars()
         .map(|c| match c {
             'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.' | '~' => c.to_string(),
             ' ' => "+".to_string(),
             _ => format!("%{:02X}", c as u32),
         })
-        .collect();
+        .collect()
+}
+
+pub(crate) fn redirect_msg(msg: &str, ok: bool) -> Response {
+    let encoded = encode_component(msg);
     let flag = if ok { "1" } else { "0" };
     Redirect::to(&format!("/dashboard?msg={encoded}&ok={flag}")).into_response()
 }

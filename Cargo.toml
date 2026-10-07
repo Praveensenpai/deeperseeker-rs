@@ -1,6 +1,6 @@
 [package]
 name = "deeperseeker"
-version = "0.2.33"
+version = "0.3.0"
 edition = "2021"
 description = "High-performance DeepSeek Web reverse proxy in Rust, based on DeeperSeeker by AmanCode22"
 repository = "https://github.com/Praveensenpai/deeperseeker-rs"
@@ -78,4 +78,13 @@ dirs = "5.0"
 wasmtime = "28"
 flate2 = "1.1.10"
 tar = "0.4.46"
+tokenizers = "0.23.2"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+
+[dev-dependencies]
+wiremock = "0.6"
 

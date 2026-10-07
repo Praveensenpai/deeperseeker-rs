@@ -38,6 +38,28 @@ pub async fn record_usage(
     cached_tokens: u32,
     token_id: Option<i64>,
 ) -> Result<()> {
+    record_usage_attributed(
+        conn,
+        model,
+        prompt_tokens,
+        completion_tokens,
+        cached_tokens,
+        token_id,
+        None,
+    )
+    .await
+}
+
+/// Record usage and optionally attribute it to a downstream client key.
+pub async fn record_usage_attributed(
+    conn: &Connection,
+    model: &str,
+    prompt_tokens: u32,
+    completion_tokens: u32,
+    cached_tokens: u32,
+    token_id: Option<i64>,
+    client_key_id: Option<i64>,
+) -> Result<()> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs_f64())
@@ -55,9 +77,9 @@ pub async fn record_usage(
 
     conn.call(move |db| {
         db.execute(
-            "INSERT INTO request_usage (timestamp, date, model, prompt_tokens, completion_tokens, total_tokens, token_id, cached_tokens)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-            params![now, date_str, m, p, c, total, token_id, ca],
+            "INSERT INTO request_usage (timestamp, date, model, prompt_tokens, completion_tokens, total_tokens, token_id, cached_tokens, client_key_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![now, date_str, m, p, c, total, token_id, ca, client_key_id],
         )?;
         Ok(())
     })

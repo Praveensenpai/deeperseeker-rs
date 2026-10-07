@@ -48,8 +48,8 @@ if [[ -f "./Cargo.toml" ]] && grep -q 'name = "deeperseeker"' ./Cargo.toml; then
     cargo build --release
     install -m 755 "target/release/${BINARY}" "${INSTALL_BIN_DIR}/${BINARY}"
 
-    echo -e "  \033[1;34m📦\033[0m Syncing runtime assets (templates, static, wasm)..."
-    cp -r templates static wasm "${INSTALL_SHARE_DIR}/"
+    echo -e "  \033[1;34m📦\033[0m Syncing runtime assets (templates, static, wasm, assets)..."
+    cp -r templates static wasm assets "${INSTALL_SHARE_DIR}/"
 else
     TMP_DIR="$(mktemp -d)"
     trap 'rm -rf "${TMP_DIR}"' EXIT
@@ -91,6 +91,9 @@ else
     fi
     if [[ -d "${TMP_DIR}/wasm" ]]; then
         cp -r "${TMP_DIR}/wasm" "${INSTALL_SHARE_DIR}/"
+    fi
+    if [[ -d "${TMP_DIR}/assets" ]]; then
+        cp -r "${TMP_DIR}/assets" "${INSTALL_SHARE_DIR}/"
     fi
 fi
 
@@ -256,7 +259,7 @@ PYEOF
         fi
         cat << JEOF > "${opencode_cfg_file}"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "\$schema": "https://opencode.ai/config.json",
   "provider": {
     "deeperseeker": {
       "npm": "@ai-sdk/openai-compatible",

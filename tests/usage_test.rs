@@ -141,6 +141,20 @@ fn sample_summary_view() -> deeperseeker::api::dashboard::DashboardSummaryView {
     }
 }
 
+fn sample_client_key_view() -> deeperseeker::api::dashboard::DashboardClientKeyView {
+    deeperseeker::api::dashboard::DashboardClientKeyView {
+        id: 1,
+        name: "team-alpha".to_string(),
+        key_prefix: "dsk-abc123…".to_string(),
+        quota: "1.0M".to_string(),
+        window: "day".to_string(),
+        used: "12.0K".to_string(),
+        used_pct: 1,
+        revoked: false,
+        last_used: "2m ago".to_string(),
+    }
+}
+
 fn sample_token_view() -> deeperseeker::api::dashboard::DashboardTokenView {
     deeperseeker::api::dashboard::DashboardTokenView {
         id: 1,
@@ -178,6 +192,8 @@ fn test_dashboard_template_metrics_rendering() {
     ctx.insert("port", &4000);
     ctx.insert("api_key", &"dseeker");
     ctx.insert("version", &"0.2.26");
+    ctx.insert("client_keys", &[sample_client_key_view()]);
+    ctx.insert("new_key", &None::<String>);
 
     let rendered = tera.render("dashboard.html", &ctx).unwrap();
     assert!(rendered.contains("44.9K"));
@@ -198,4 +214,7 @@ fn test_dashboard_template_metrics_rendering() {
     assert!(rendered.contains("<th>Last Used</th>"));
     assert!(rendered.contains("<th>Input</th>"));
     assert!(rendered.contains("<th>Output</th>"));
+    assert!(rendered.contains("Client API Keys"));
+    assert!(rendered.contains("team-alpha"));
+    assert!(rendered.contains("dsk-abc123…"));
 }

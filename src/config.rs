@@ -17,6 +17,10 @@ pub struct AppConfig {
     pub human_pause_chance: f64,
     pub human_pause_max: f64,
     pub suspend_probe_interval_secs: u64,
+    pub upstream_timeout_secs: u64,
+    pub upstream_connect_timeout_secs: u64,
+    pub session_retention_days: u64,
+    pub usage_retention_days: u64,
 }
 
 impl AppConfig {
@@ -66,6 +70,22 @@ impl AppConfig {
             .and_then(|h| h.parse::<u64>().ok())
             .map(|h| h * 3600)
             .unwrap_or(6 * 3600);
+        let upstream_timeout_secs = env::var("DEEPSEEKER_UPSTREAM_TIMEOUT_SECS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(300);
+        let upstream_connect_timeout_secs = env::var("DEEPSEEKER_UPSTREAM_CONNECT_TIMEOUT_SECS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(15);
+        let session_retention_days = env::var("DEEPSEEKER_SESSION_RETENTION_DAYS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(30);
+        let usage_retention_days = env::var("DEEPSEEKER_USAGE_RETENTION_DAYS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0);
 
         Self {
             host,
@@ -83,6 +103,10 @@ impl AppConfig {
             human_pause_chance,
             human_pause_max,
             suspend_probe_interval_secs,
+            upstream_timeout_secs,
+            upstream_connect_timeout_secs,
+            session_retention_days,
+            usage_retention_days,
         }
     }
 }

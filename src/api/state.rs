@@ -2,6 +2,7 @@ use crate::api::live_log::LiveLog;
 use crate::config::AppConfig;
 use crate::infra::deepseek_client::DeepSeekClient;
 use crate::infra::pow::PowSolver;
+use crate::infra::tokenizer::Tokenizer;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tera::Tera;
@@ -17,6 +18,8 @@ pub struct AppState {
     pub in_flight: Arc<Mutex<HashMap<i64, usize>>>,
     pub tera: Arc<Tera>,
     pub live_log: Arc<LiveLog>,
+    pub metrics: Arc<crate::infra::metrics::Metrics>,
+    pub tokenizer: Arc<Tokenizer>,
 }
 
 impl AppState {

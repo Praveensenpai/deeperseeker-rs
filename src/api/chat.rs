@@ -1,21 +1,31 @@
-use crate::api::chat_stream::{handle_streaming_response, handle_unary_response};
+use crate::api::chat_stream::handle_streaming_response;
+use crate::api::chat_support::{handle_token_auth_failure, pace_token_request};
+use crate::api::chat_unary::handle_unary_response;
+use crate::api::middleware::ClientAuth;
 use crate::api::state::AppState;
 use crate::domain::openai::ChatCompletionRequest;
 use crate::domain::session::compute_signature;
 use crate::domain::token::Token;
 use crate::domain::upstream::is_auth_failure;
-use crate::infra::db::{mark_active, mark_expired, mark_limited, pick_token, touch_token};
+use crate::infra::db::{mark_active, mark_limited, pick_token, touch_token};
 use crate::infra::deepseek_client::CompletionArgs;
 use crate::infra::media::{resolve_message_media, MediaContext};
 use crate::infra::prompt::build_prompt_for_turn;
 use crate::infra::session_db::find_session;
-use axum::{extract::State, http::StatusCode, response::Response, Json};
+use axum::{
+    extract::{Extension, State},
+    http::StatusCode,
+    response::Response,
+    Json,
+};
 use serde_json::json;
 
 pub async fn chat_completions(
     State(state): State<AppState>,
+    auth: Option<Extension<ClientAuth>>,
     Json(req): Json<ChatCompletionRequest>,
 ) -> Result<Response, (StatusCode, Json<serde_json::Value>)> {
+    let client_key_id = auth.and_then(|Extension(a)| a.client_key_id);
     if req.messages.is_empty() {
         return Err((
             StatusCode::BAD_REQUEST,
@@ -25,8 +35,11 @@ pub async fn chat_completions(
 
     let mut exclude = Vec::new();
     for _ in 0..5 {
-        match execute_completion_attempt(&state, &req, &exclude).await {
-            Ok(resp) => return Ok(resp),
+        match execute_completion_attempt(&state, &req, &exclude, client_key_id).await {
+            Ok(resp) => {
+                state.metrics.record_success();
+                return Ok(resp);
+            }
             Err(AttemptError::RateLimited(tok_id)) => {
                 let _ = mark_limited(&state.db, tok_id, state.config.cookie_cooldown).await;
                 exclude.push(tok_id);
@@ -36,21 +49,28 @@ pub async fn chat_completions(
                 exclude.push(tok_id);
             }
             Err(AttemptError::Fatal(status, msg)) => {
+                state.metrics.record_error();
                 return Err((status, Json(json!({"error": {"message": msg}}))));
             }
         }
     }
 
-    Err((
-        StatusCode::TOO_MANY_REQUESTS,
-        Json(json!({
-            "error": {
-                "message": "All tokens exhausted, suspended, or rate limited. Please retry in a moment.",
-                "type": "rate_limit_error",
-                "code": "rate_limit_exceeded"
-            }
-        })),
-    ))
+    state.metrics.record_rate_limited();
+    let retry_after = state.config.cookie_cooldown;
+    let body = Json(json!({
+        "error": {
+            "message": "All tokens exhausted, suspended, or rate limited. Please retry in a moment.",
+            "type": "rate_limit_error",
+            "code": "rate_limit_exceeded",
+            "retry_after": retry_after
+        }
+    }));
+    Ok(Response::builder()
+        .status(StatusCode::TOO_MANY_REQUESTS)
+        .header(axum::http::header::RETRY_AFTER, retry_after.to_string())
+        .header(axum::http::header::CONTENT_TYPE, "application/json")
+        .body(axum::body::Body::from(body.0.to_string()))
+        .unwrap_or_default())
 }
 
 #[derive(Debug)]
@@ -67,57 +87,11 @@ pub(crate) struct PreparedSession {
     pub is_first: bool,
 }
 
-async fn pace_token_request(state: &AppState, last_used: Option<f64>) {
-    if let Some(last) = last_used {
-        let elapsed = crate::infra::db::now_timestamp() - last;
-        let cfg = &state.config;
-        let target = crate::infra::pacing::effective_gap(
-            cfg.request_gap,
-            cfg.request_gap_jitter,
-            cfg.human_pause_chance,
-            cfg.human_pause_max,
-        );
-        crate::infra::pacing::sleep_remainder(elapsed, target).await;
-    }
-}
-
-async fn handle_token_auth_failure(state: &AppState, tok_id: i64, msg: &str) {
-    let Ok(Some(tok)) = crate::infra::db::get_token(&state.db, tok_id).await else {
-        return;
-    };
-
-    match state
-        .client
-        .create_pow_challenge(&tok.token, "/api/v0/chat/completion")
-        .await
-    {
-        Ok(_) => {
-            tracing::warn!(
-                "Token #{} chat error ({msg}), but passed standalone verification; keeping ACTIVE",
-                tok_id
-            );
-        }
-        Err(e) if is_auth_failure(&e) => {
-            tracing::warn!(
-                "Token #{} confirmed expired/invalid by upstream ({e:#}); marking EXPIRED",
-                tok_id
-            );
-            let _ = mark_expired(&state.db, tok_id).await;
-        }
-        Err(e) => {
-            tracing::warn!(
-                "Token #{} standalone probe failed non-auth error ({e:#}); applying rate limit",
-                tok_id
-            );
-            let _ = mark_limited(&state.db, tok_id, state.config.cookie_cooldown).await;
-        }
-    }
-}
-
 async fn execute_completion_attempt(
     state: &AppState,
     req: &ChatCompletionRequest,
     exclude: &[i64],
+    client_key_id: Option<i64>,
 ) -> Result<Response, AttemptError> {
     let prep = prepare_session(state, req, exclude).await?;
     let token_id = prep.token.id;
@@ -125,7 +99,7 @@ async fn execute_completion_attempt(
 
     pace_token_request(state, prep.token.last_used).await;
 
-    let res = run_chat_request(state, req, &prep).await;
+    let res = run_chat_request(state, req, &prep, client_key_id).await;
     state.decrement_in_flight(token_id).await;
 
     match res {
@@ -151,7 +125,7 @@ async fn execute_completion_attempt(
                 let fresh_token_id = fresh_prep.token.id;
                 state.increment_in_flight(fresh_token_id).await;
                 pace_token_request(state, fresh_prep.token.last_used).await;
-                let fresh_res = run_chat_request(state, req, &fresh_prep).await;
+                let fresh_res = run_chat_request(state, req, &fresh_prep, client_key_id).await;
                 state.decrement_in_flight(fresh_token_id).await;
                 if fresh_res.is_ok() {
                     let _ = touch_token(&state.db, fresh_token_id).await;
@@ -275,6 +249,7 @@ async fn run_chat_request(
     state: &AppState,
     req: &ChatCompletionRequest,
     prep: &PreparedSession,
+    client_key_id: Option<i64>,
 ) -> Result<Response, AttemptError> {
     let args = prepare_completion_args(state, req, prep).await?;
     let resp = state
@@ -297,16 +272,20 @@ async fn run_chat_request(
             prep.session_id.clone(),
             prep.parent_id,
             resp,
+            client_key_id,
         )
         .await
         .map_err(|(sc, msg)| AttemptError::Fatal(sc, msg))
     } else {
         handle_unary_response(
             state,
-            req.model.clone(),
-            prep.token.id,
-            prep.session_id.clone(),
-            prep.parent_id,
+            crate::api::chat_unary::UnaryContext {
+                model: req.model.clone(),
+                token_id: prep.token.id,
+                session_id: prep.session_id.clone(),
+                parent_id: prep.parent_id,
+                client_key_id,
+            },
             &req.messages,
             resp,
         )

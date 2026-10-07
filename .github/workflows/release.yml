@@ -58,7 +58,7 @@ jobs:
           mkdir -p dist
           SRC_BIN="target/${{ matrix.target }}/release/deeperseeker"
           cp "${SRC_BIN}" deeperseeker
-          tar -czf "dist/deeperseeker-${{ matrix.arch_name }}-linux.tar.gz" deeperseeker templates static wasm
+          tar -czf "dist/deeperseeker-${{ matrix.arch_name }}-linux.tar.gz" deeperseeker templates static wasm assets
           cd dist
           sha256sum "deeperseeker-${{ matrix.arch_name }}-linux.tar.gz" > "deeperseeker-${{ matrix.arch_name }}-linux.tar.gz.sha256"
 

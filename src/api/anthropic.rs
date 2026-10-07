@@ -1,4 +1,5 @@
 use crate::api::chat::chat_completions;
+use crate::api::middleware::ClientAuth;
 use crate::api::state::AppState;
 use crate::domain::anthropic::{
     AnthropicBlock, AnthropicContent, AnthropicMessage, AnthropicMessageRequest,
@@ -8,7 +9,7 @@ use crate::domain::openai::{
     ChatCompletionRequest, ChatCompletionResponse, ChatMessage, ContentPart, MessageContent,
 };
 use axum::{
-    extract::State,
+    extract::{Extension, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     Json,
@@ -17,6 +18,7 @@ use serde_json::json;
 
 pub async fn anthropic_messages(
     State(state): State<AppState>,
+    auth: Option<Extension<ClientAuth>>,
     Json(req): Json<AnthropicMessageRequest>,
 ) -> Result<Response, (StatusCode, Json<serde_json::Value>)> {
     let messages = convert_to_chat_messages(req.system, req.messages);
@@ -33,7 +35,7 @@ pub async fn anthropic_messages(
         web_search: None,
     };
 
-    let resp = chat_completions(State(state), Json(openai_req)).await?;
+    let resp = chat_completions(State(state), auth, Json(openai_req)).await?;
     if req.stream {
         return Ok(resp);
     }

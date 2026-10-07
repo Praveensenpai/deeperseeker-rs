@@ -161,6 +161,97 @@
     {% endif %}
 </div>
 
+<!-- Client API Keys -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-cyan);"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg>
+            Client API Keys ({{ client_keys|length }})
+        </h2>
+    </div>
+
+    {% if new_key %}
+    <div class="token-guide-box" style="border-color: var(--accent-emerald);">
+        <div class="guide-header">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"></path></svg>
+            <span>Copy this key now — it will not be shown again.</span>
+        </div>
+        <div class="code-snippet-bar">
+            <span id="new-key-value">{{ new_key }}</span>
+            <button type="button" class="copy-btn" onclick="copyText(document.getElementById('new-key-value').textContent, this)">Copy Key</button>
+        </div>
+    </div>
+    {% endif %}
+
+    <form method="post" action="/client-keys/add">
+        <div class="form-row">
+            <input type="text" name="name" class="input-field" placeholder="Name (e.g. team-alpha)" required style="flex: 1; min-width: 160px;">
+            <input type="text" name="quota_tokens" class="input-field" placeholder="Token quota (blank = unlimited)" style="flex: 1; min-width: 180px;">
+            <select name="window" class="input-field" style="flex: 1; min-width: 120px;">
+                <option value="day">Per day</option>
+                <option value="week">Per week</option>
+                <option value="month">Per month</option>
+                <option value="all">All time</option>
+            </select>
+            <button type="submit" class="btn-primary">Create Key</button>
+        </div>
+    </form>
+
+    {% if client_keys %}
+    <div class="table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width: 50px;">ID</th>
+                    <th>Name</th>
+                    <th>Key</th>
+                    <th>Quota</th>
+                    <th>Window</th>
+                    <th>Used</th>
+                    <th>Last Used</th>
+                    <th>Status</th>
+                    <th style="text-align: right;">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for k in client_keys %}
+                <tr>
+                    <td style="font-family: var(--font-mono); font-weight: 600;">#{{ k.id }}</td>
+                    <td style="font-weight: 500; color: var(--text-primary);">{{ k.name }}</td>
+                    <td><code style="font-family: var(--font-mono); font-size: 0.8rem;">{{ k.key_prefix }}</code></td>
+                    <td style="font-family: var(--font-mono);">{{ k.quota }}</td>
+                    <td style="font-family: var(--font-mono); color: var(--text-secondary);">{{ k.window }}</td>
+                    <td style="font-family: var(--font-mono); color: var(--accent-emerald);">{{ k.used }}{% if k.used_pct > 0 %} <span style="color: var(--text-muted);">({{ k.used_pct }}%)</span>{% endif %}</td>
+                    <td style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--text-secondary);">{{ k.last_used }}</td>
+                    <td>
+                        {% if k.revoked %}
+                            <span class="status-dot status-expired" title="Revoked"></span>
+                        {% else %}
+                            <span class="status-dot status-active" title="Active"></span>
+                        {% endif %}
+                    </td>
+                    <td style="text-align: right; white-space: nowrap;">
+                        {% if not k.revoked %}
+                        <form method="post" action="/client-keys/{{ k.id }}/revoke" style="display:inline" onsubmit="return confirm('Revoke client key #{{ k.id }}?')">
+                            <button type="submit" class="btn-ghost">Revoke</button>
+                        </form>
+                        {% endif %}
+                        <form method="post" action="/client-keys/{{ k.id }}/delete" style="display:inline" onsubmit="return confirm('Delete client key #{{ k.id }}?')">
+                            <button type="submit" class="btn-danger-outline">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.9rem;">
+        No client keys yet. Create one to issue a quota-limited API key.
+    </div>
+    {% endif %}
+</div>
+
 <!-- Token Usage Analytics Table -->
 <div class="card">
     <div class="card-header">
@@ -220,7 +311,7 @@
 </div>
 
 <script>
-    const LOG_MAX = 100;
+    const LOG_MAX = 10;
     let logSource = null;
     let logPaused = false;
 

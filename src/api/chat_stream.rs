@@ -1,6 +1,6 @@
 use crate::api::chat_chunks::{
-    build_chat_response, build_terminal_chunk, create_openai_chunks, current_timestamp,
-    make_reasoning_chunk, make_text_chunk, make_tool_calls_chunk, ChatResponseArgs,
+    build_terminal_chunk, create_openai_chunks, current_timestamp, make_reasoning_chunk,
+    make_text_chunk, make_tool_calls_chunk,
 };
 use crate::api::live_log::{render_input, LogFinish, LogHandle, LogSeed};
 use crate::api::state::AppState;
@@ -11,12 +11,12 @@ use crate::infra::session_db::save_session;
 pub use crate::infra::sse::{
     drain_sse_lines, extract_chunks_from_event, parse_sse_line, ExtractedChunk, SseLineResult,
 };
-use crate::infra::usage_db::record_usage;
+use crate::infra::tokenizer::{count_message_tokens, Tokenizer};
+use crate::infra::usage_db::record_usage_attributed;
 use axum::{
     body::Body,
     http::{header::CONTENT_TYPE, StatusCode},
-    response::{IntoResponse, Response},
-    Json,
+    response::Response,
 };
 use futures::StreamExt;
 use uuid::Uuid;
@@ -43,6 +43,7 @@ pub async fn handle_streaming_response(
     session_id: String,
     parent_id: i64,
     upstream_resp: reqwest::Response,
+    client_key_id: Option<i64>,
 ) -> Result<Response, (StatusCode, String)> {
     let chat_id = format!("chatcmpl-{}", Uuid::new_v4());
     let created = current_timestamp();
@@ -56,8 +57,7 @@ pub async fn handle_streaming_response(
         input: render_input(&req.messages),
     });
 
-    let prompt_chars: usize = req.messages.iter().map(|m| m.text_content().len()).sum();
-    let prompt_tokens = std::cmp::max(1, (prompt_chars / 4) as u32);
+    let prompt_tokens = count_message_tokens(&state.tokenizer, &req.messages);
 
     let sse_stream = async_stream::stream! {
         let mut cur_resp = upstream_resp;
@@ -105,11 +105,12 @@ pub async fn handle_streaming_response(
             }
 
             if !stream_state.full_content.is_empty() || !parsed.tool_calls.is_empty() {
-                let ids = (cur_tok, cur_sess, cur_parent, prompt_tokens, stream_state.full_content.len());
-                if let Some(term) = finalize_stream_session(&db, &req.messages, &ctx, &parsed, ids).await {
+                let comp_tokens = state.tokenizer.count_min_one(&stream_state.full_content);
+                let ids = (cur_tok, cur_sess, cur_parent, prompt_tokens, comp_tokens);
+                if let Some(term) = finalize_stream_session(&db, &req.messages, &ctx, &parsed, ids, client_key_id, &state.tokenizer).await {
                     yield Ok(format!("data: {term}\n\n"));
                 }
-                emit_stream_log_success(&log, &req.messages, cur_parent, prompt_tokens, &stream_state, &parsed);
+                emit_stream_log_success(&log, &req.messages, cur_parent, prompt_tokens, &stream_state, &parsed, &state.tokenizer);
                 yield Ok("data: [DONE]\n\n".to_string());
                 return;
             }
@@ -286,9 +287,10 @@ fn emit_stream_log_success(
     prompt_tokens: u32,
     state: &StreamState,
     parsed: &ParsedDsml,
+    tokenizer: &Tokenizer,
 ) {
-    let comp_tokens = std::cmp::max(1, (state.full_content.len() / 4) as u32);
-    let cached_tokens = compute_cached_tokens(parent_id, messages, prompt_tokens);
+    let comp_tokens = tokenizer.count_min_one(&state.full_content);
+    let cached_tokens = compute_cached_tokens(tokenizer, parent_id, messages, prompt_tokens);
     let finish_reason = if parsed.tool_calls.is_empty() {
         "stop"
     } else {
@@ -308,9 +310,11 @@ async fn finalize_stream_session(
     req_messages: &[ChatMessage],
     ctx: &StreamContext<'_>,
     parsed: &ParsedDsml,
-    ids: (i64, String, i64, u32, usize),
+    ids: (i64, String, i64, u32, u32),
+    client_key_id: Option<i64>,
+    tokenizer: &Tokenizer,
 ) -> Option<String> {
-    let (token_id, session_id, parent_id, prompt_tokens, full_len) = ids;
+    let (token_id, session_id, parent_id, prompt_tokens, comp_tokens) = ids;
     if parent_id < 40 {
         save_stream_session(
             db,
@@ -324,15 +328,15 @@ async fn finalize_stream_session(
         tracing::info!("Rolling over session at parent {parent_id}");
         let _ = crate::infra::session_db::delete_sessions_for_chat(db, token_id, &session_id).await;
     }
-    let comp_tokens = std::cmp::max(1, (full_len / 4) as u32);
-    let cached_tokens = compute_cached_tokens(parent_id, req_messages, prompt_tokens);
-    let _ = record_usage(
+    let cached_tokens = compute_cached_tokens(tokenizer, parent_id, req_messages, prompt_tokens);
+    let _ = record_usage_attributed(
         db,
         ctx.model,
         prompt_tokens,
         comp_tokens,
         cached_tokens,
         Some(token_id),
+        client_key_id,
     )
     .await;
     let finish_reason = if parsed.tool_calls.is_empty() {
@@ -351,18 +355,23 @@ async fn finalize_stream_session(
     )
 }
 
-fn compute_cached_tokens(parent_id: i64, req_messages: &[ChatMessage], prompt_tokens: u32) -> u32 {
+pub(crate) fn compute_cached_tokens(
+    tokenizer: &Tokenizer,
+    parent_id: i64,
+    req_messages: &[ChatMessage],
+    prompt_tokens: u32,
+) -> u32 {
     if parent_id == 0 {
         return 0;
     }
-    let last_chars = req_messages
+    let last_tokens = req_messages
         .last()
-        .map(|m| m.text_content().len())
+        .map(|m| tokenizer.count(&m.text_content()))
         .unwrap_or(0);
-    prompt_tokens.saturating_sub((last_chars / 4).max(1) as u32)
+    prompt_tokens.saturating_sub(last_tokens.max(1))
 }
 
-async fn save_stream_session(
+pub(crate) async fn save_stream_session(
     db: &tokio_rusqlite::Connection,
     messages: &[ChatMessage],
     model: &str,
@@ -381,155 +390,4 @@ async fn save_stream_session(
         &sig[..8.min(sig.len())]
     );
     let _ = save_session(db, &sig, &sess).await;
-}
-
-pub async fn handle_unary_response(
-    state: &AppState,
-    model: String,
-    token_id: i64,
-    session_id: String,
-    parent_id: i64,
-    req_messages: &[ChatMessage],
-    upstream_resp: reqwest::Response,
-) -> Result<Response, (StatusCode, String)> {
-    let log = state.live_log.begin(LogSeed {
-        model: model.clone(),
-        token_id: Some(token_id),
-        session_id: session_id.clone(),
-        stream: false,
-        input: render_input(req_messages),
-    });
-
-    let (full_content, full_reasoning) = read_unary_body(upstream_resp).await;
-    let (raw_content, reasoning) = finalize_content(&full_content, &full_reasoning);
-    let parsed = parse_dsml(&raw_content);
-
-    if raw_content.is_empty() && parsed.tool_calls.is_empty() {
-        let _ =
-            crate::infra::session_db::delete_sessions_for_chat(&state.db, token_id, &session_id)
-                .await;
-        log.fail("DeepSeek returned empty completion");
-        return Err((
-            StatusCode::TOO_MANY_REQUESTS,
-            "DeepSeek returned empty completion".to_string(),
-        ));
-    }
-
-    save_stream_session(
-        &state.db,
-        req_messages,
-        &model,
-        &parsed,
-        (token_id, session_id, parent_id),
-    )
-    .await;
-
-    let (content, tool_calls, finish_reason) = if parsed.tool_calls.is_empty() {
-        (parsed.text_content, None, "stop".to_string())
-    } else {
-        (
-            parsed.text_content,
-            Some(parsed.tool_calls),
-            "tool_calls".to_string(),
-        )
-    };
-
-    let prompt_chars: usize = req_messages.iter().map(|m| m.text_content().len()).sum();
-    let prompt_tokens = std::cmp::max(1, (prompt_chars / 4) as u32);
-    let comp_chars = full_content.len() + reasoning.as_ref().map(|r| r.len()).unwrap_or(0);
-    let comp_tokens = std::cmp::max(1, (comp_chars / 4) as u32);
-    let cached_tokens = compute_cached_tokens(parent_id, req_messages, prompt_tokens);
-    let _ = record_usage(
-        &state.db,
-        &model,
-        prompt_tokens,
-        comp_tokens,
-        cached_tokens,
-        Some(token_id),
-    )
-    .await;
-
-    let tool_count = tool_calls.as_ref().map(|t| t.len()).unwrap_or(0);
-    log.set_output(&content, reasoning.as_deref());
-    log.finish(LogFinish {
-        prompt_tokens,
-        completion_tokens: comp_tokens,
-        cached_tokens,
-        finish_reason: finish_reason.clone(),
-        tool_calls: tool_count,
-    });
-
-    let resp = build_chat_response(ChatResponseArgs {
-        model: &model,
-        content,
-        reasoning,
-        tool_calls,
-        finish_reason: &finish_reason,
-        prompt_tokens,
-        comp_tokens,
-        cached_tokens,
-    });
-    Ok(Json(resp).into_response())
-}
-
-async fn read_unary_body(upstream_resp: reqwest::Response) -> (String, String) {
-    let mut byte_stream = upstream_resp.bytes_stream();
-    let (mut full_content, mut full_reasoning, mut buffer) =
-        (String::new(), String::new(), String::new());
-    let mut think_open = false;
-
-    while let Some(chunk_res) = byte_stream.next().await {
-        let Ok(bytes) = chunk_res else {
-            tracing::warn!("Upstream stream dropped mid-generation (unary)");
-            break;
-        };
-        let lines = drain_sse_lines(&mut buffer, &bytes);
-        if process_unary_lines(
-            &lines,
-            &mut think_open,
-            &mut full_content,
-            &mut full_reasoning,
-        ) {
-            break;
-        }
-    }
-    (full_content, full_reasoning)
-}
-
-fn process_unary_lines(
-    lines: &[String],
-    think_open: &mut bool,
-    full_content: &mut String,
-    full_reasoning: &mut String,
-) -> bool {
-    for line in lines {
-        match parse_sse_line(line, think_open) {
-            SseLineResult::Done => return true,
-            SseLineResult::Error(code, msg) => {
-                tracing::warn!("Upstream error in unary SSE (code {code}): {msg}");
-                return true;
-            }
-            SseLineResult::Chunks(chunks) => {
-                for item in chunks {
-                    if let Some(c) = item.content {
-                        full_content.push_str(&c);
-                    }
-                    if let Some(r) = item.reasoning {
-                        full_reasoning.push_str(&r);
-                    }
-                }
-            }
-            SseLineResult::None => {}
-        }
-    }
-    false
-}
-
-fn finalize_content(full_content: &str, full_reasoning: &str) -> (String, Option<String>) {
-    let (tc, tr) = (full_content.trim(), full_reasoning.trim());
-    if tc.is_empty() && !tr.is_empty() {
-        (tr.to_string(), None)
-    } else {
-        (tc.to_string(), (!tr.is_empty()).then(|| tr.to_string()))
-    }
 }

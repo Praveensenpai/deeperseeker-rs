@@ -139,17 +139,27 @@ async fn run_server(args: ServeArgs) -> Result<()> {
         PowSolver::new(&config.wasm_path).context("Failed initializing WASM PoW solver engine")?,
     );
 
-    let client = DeepSeekClient::new();
+    let client = DeepSeekClient::with_timeouts(
+        config.upstream_timeout_secs,
+        config.upstream_connect_timeout_secs,
+    );
     let _suspend_probe = deeperseeker::infra::watchdog::start_suspended_token_probe(
         db.clone(),
         client.clone(),
         std::time::Duration::from_secs(config.suspend_probe_interval_secs),
+    );
+    let _retention = deeperseeker::infra::retention::start_retention_task(
+        db.clone(),
+        config.session_retention_days,
+        config.usage_retention_days,
     );
     let template_pattern = deeperseeker::infra::assets::resolve_templates_pattern();
     let tera = Arc::new(Tera::new(&template_pattern).context("Failed compiling HTML templates")?);
 
     let in_flight = Arc::new(Mutex::new(HashMap::new()));
     let live_log = Arc::new(deeperseeker::api::live_log::LiveLog::new());
+    let metrics = Arc::new(deeperseeker::infra::metrics::Metrics::new());
+    let tokenizer = deeperseeker::infra::tokenizer::Tokenizer::load();
     let state = AppState {
         config: config.clone(),
         db,
@@ -158,6 +168,8 @@ async fn run_server(args: ServeArgs) -> Result<()> {
         in_flight,
         tera,
         live_log,
+        metrics,
+        tokenizer,
     };
 
     let router = build_router(state);
@@ -172,8 +184,37 @@ async fn run_server(args: ServeArgs) -> Result<()> {
     info!("Dashboard:       http://{bind_addr}/dashboard");
 
     axum::serve(listener, router)
+        .with_graceful_shutdown(shutdown_signal())
         .await
         .context("Server exited unexpectedly")?;
 
     Ok(())
+}
+
+/// Resolve when the process receives Ctrl-C or SIGTERM so in-flight streams
+/// can drain before exit (systemd sends SIGTERM on stop/restart).
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut sig) => {
+                sig.recv().await;
+            }
+            Err(e) => tracing::warn!("Failed to install SIGTERM handler: {e}"),
+        }
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+
+    tracing::info!("Shutdown signal received, draining in-flight requests...");
 }

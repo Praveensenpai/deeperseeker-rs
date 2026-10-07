@@ -64,6 +64,17 @@ pub async fn init_db(conn: &Connection) -> Result<()> {
                 token_id INTEGER,
                 cached_tokens INTEGER DEFAULT 0
             );
+            CREATE TABLE IF NOT EXISTS client_keys (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                key_hash TEXT NOT NULL UNIQUE,
+                key_prefix TEXT NOT NULL,
+                quota_tokens INTEGER NOT NULL DEFAULT 0,
+                window_secs INTEGER NOT NULL DEFAULT 0,
+                revoked INTEGER NOT NULL DEFAULT 0,
+                created_at REAL NOT NULL,
+                last_used REAL
+            );
             CREATE TABLE IF NOT EXISTS meta (
                 key TEXT PRIMARY KEY,
                 value INTEGER NOT NULL
@@ -81,6 +92,14 @@ pub async fn init_db(conn: &Connection) -> Result<()> {
         );
         let _ = c.execute(
             "ALTER TABLE request_usage ADD COLUMN cached_tokens INTEGER DEFAULT 0",
+            [],
+        );
+        let _ = c.execute(
+            "ALTER TABLE request_usage ADD COLUMN client_key_id INTEGER",
+            [],
+        );
+        let _ = c.execute(
+            "CREATE INDEX IF NOT EXISTS idx_usage_client_key ON request_usage(client_key_id)",
             [],
         );
         // Cascade semantics for tokens deleted before this cleanup existed:

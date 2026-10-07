@@ -18,6 +18,7 @@ COPY src ./src
 COPY templates ./templates
 COPY static ./static
 COPY wasm ./wasm
+COPY assets ./assets
 
 # Re-touch source and compile production binary
 RUN touch src/main.rs src/lib.rs && cargo build --release
@@ -41,6 +42,7 @@ COPY --from=builder /usr/src/deeperseeker/target/release/deeperseeker /usr/local
 COPY --from=builder /usr/src/deeperseeker/templates ./templates
 COPY --from=builder /usr/src/deeperseeker/static ./static
 COPY --from=builder /usr/src/deeperseeker/wasm ./wasm
+COPY --from=builder /usr/src/deeperseeker/assets ./assets
 
 # Configure persistent data directory
 RUN mkdir -p /data && chown -R deeperseeker:deeperseeker /app /data

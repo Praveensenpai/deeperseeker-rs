@@ -11,6 +11,7 @@ const CLIENT_VERSION: &str = "2.4.5";
 #[derive(Clone)]
 pub struct DeepSeekClient {
     client: Client,
+    base_url: String,
 }
 
 pub struct CompletionArgs {
@@ -31,13 +32,47 @@ impl Default for DeepSeekClient {
 }
 
 impl DeepSeekClient {
+    /// Default client: 300s idle-read timeout, 15s connect timeout.
     pub fn new() -> Self {
-        Self {
-            client: Client::builder()
-                .tcp_keepalive(Duration::from_secs(30))
-                .build()
-                .unwrap_or_default(),
+        Self::with_timeouts(300, 15)
+    }
+
+    /// Build a client with explicit idle-read and connect timeouts.
+    ///
+    /// A build failure is logged rather than silently swallowed; the fallback
+    /// is a dependency-default client so the proxy still starts.
+    pub fn with_timeouts(timeout_secs: u64, connect_timeout_secs: u64) -> Self {
+        Self::with_base_url(BASE_URL, timeout_secs, connect_timeout_secs)
+    }
+
+    /// Build a client against an explicit upstream base URL. The trailing
+    /// slash is trimmed so path joining stays consistent. Used by tests to
+    /// point at a mock upstream.
+    pub fn with_base_url(base_url: &str, timeout_secs: u64, connect_timeout_secs: u64) -> Self {
+        let base_url = base_url.trim_end_matches('/').to_string();
+        match Client::builder()
+            .tcp_keepalive(Duration::from_secs(30))
+            .connect_timeout(Duration::from_secs(connect_timeout_secs.max(1)))
+            .read_timeout(Duration::from_secs(timeout_secs.max(1)))
+            .build()
+        {
+            Ok(client) => Self { client, base_url },
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to build HTTP client with timeouts ({e}); \
+                     falling back to default client"
+                );
+                Self {
+                    client: Client::new(),
+                    base_url,
+                }
+            }
         }
+    }
+
+    /// Resolved upstream base URL (no trailing slash).
+    pub fn base_url(&self) -> &str {
+        &self.base_url
     }
 
     pub fn build_headers(&self, token: &str, pow: Option<&str>) -> Result<HeaderMap> {
@@ -84,7 +119,7 @@ impl DeepSeekClient {
         token: &str,
         target_path: &str,
     ) -> Result<PowChallenge> {
-        let url = format!("{BASE_URL}/api/v0/chat/create_pow_challenge");
+        let url = format!("{}/api/v0/chat/create_pow_challenge", self.base_url);
         let headers = self.build_headers(token, None)?;
         let body = json!({ "target_path": target_path });
 
@@ -116,7 +151,7 @@ impl DeepSeekClient {
     }
 
     pub async fn create_chat_session(&self, token: &str) -> Result<String> {
-        let url = format!("{BASE_URL}/api/v0/chat_session/create");
+        let url = format!("{}/api/v0/chat_session/create", self.base_url);
         let headers = self.build_headers(token, None)?;
         let body = json!({ "character_id": null });
 
@@ -148,7 +183,7 @@ impl DeepSeekClient {
     }
 
     pub async fn send_completion_request(&self, args: CompletionArgs) -> Result<reqwest::Response> {
-        let url = format!("{BASE_URL}/api/v0/chat/completion");
+        let url = format!("{}/api/v0/chat/completion", self.base_url);
         let headers = self.build_headers(&args.token, Some(&args.pow_response))?;
 
         let body = json!({
@@ -203,7 +238,7 @@ impl DeepSeekClient {
         content_type: &str,
         bytes: Vec<u8>,
     ) -> Result<String> {
-        let url = format!("{BASE_URL}/api/v0/file/upload_file");
+        let url = format!("{}/api/v0/file/upload_file", self.base_url);
         let mut headers = self.build_headers(token, Some(pow_resp))?;
         headers.remove(CONTENT_TYPE);
 
@@ -240,7 +275,10 @@ impl DeepSeekClient {
     }
 
     pub async fn download_file(&self, token: &str, file_id: &str) -> Result<Vec<u8>> {
-        let url = format!("{BASE_URL}/api/v0/file/download_file?file_id={file_id}");
+        let url = format!(
+            "{}/api/v0/file/download_file?file_id={file_id}",
+            self.base_url
+        );
         let headers = self.build_headers(token, None)?;
 
         let resp = self

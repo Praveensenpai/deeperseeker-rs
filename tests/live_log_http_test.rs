@@ -28,6 +28,10 @@ fn test_config(db_path: &str) -> AppConfig {
         human_pause_chance: 0.0,
         human_pause_max: 0.0,
         suspend_probe_interval_secs: 3600,
+        upstream_timeout_secs: 300,
+        upstream_connect_timeout_secs: 15,
+        session_retention_days: 0,
+        usage_retention_days: 0,
     }
 }
 
@@ -62,6 +66,8 @@ async fn spawn_server() -> (String, Arc<LiveLog>) {
         in_flight: Arc::new(Mutex::new(HashMap::new())),
         tera,
         live_log: Arc::clone(&live_log),
+        metrics: Arc::new(deeperseeker::infra::metrics::Metrics::new()),
+        tokenizer: deeperseeker::infra::tokenizer::Tokenizer::load(),
     };
 
     let router = build_router(state);
@@ -147,4 +153,44 @@ async fn live_log_endpoints_require_auth_and_serve_entries() {
         "bad snapshot frame: {text}"
     );
     assert!(text.contains("v4.1flash"), "snapshot missing model: {text}");
+}
+
+#[tokio::test]
+async fn metrics_endpoint_serves_prometheus_exposition() {
+    let (base, _live_log) = spawn_server().await;
+
+    let resp = reqwest::Client::new()
+        .get(format!("{base}/metrics"))
+        .send()
+        .await
+        .expect("metrics request");
+
+    assert_eq!(resp.status(), 200, "/metrics must be public and reachable");
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default()
+        .to_string();
+    assert!(
+        content_type.starts_with("text/plain"),
+        "unexpected content-type: {content_type}"
+    );
+
+    let body = resp.text().await.expect("metrics body");
+    for metric in [
+        "deeperseeker_up 1",
+        "deeperseeker_build_info",
+        "deeperseeker_tokens_total",
+        "deeperseeker_tokens_active",
+        "deeperseeker_in_flight_requests",
+        "deeperseeker_requests_total",
+        "deeperseeker_requests_success_total",
+    ] {
+        assert!(body.contains(metric), "missing `{metric}` in:\n{body}");
+    }
+    assert!(
+        body.contains("# TYPE deeperseeker_requests_total counter"),
+        "missing TYPE annotation in:\n{body}"
+    );
 }
