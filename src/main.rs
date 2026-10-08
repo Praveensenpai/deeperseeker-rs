@@ -157,6 +157,7 @@ async fn run_server(args: ServeArgs) -> Result<()> {
     let tera = Arc::new(Tera::new(&template_pattern).context("Failed compiling HTML templates")?);
 
     let in_flight = Arc::new(Mutex::new(HashMap::new()));
+    let client_gates = Arc::new(Mutex::new(HashMap::new()));
     let live_log = Arc::new(deeperseeker::api::live_log::LiveLog::new());
     let metrics = Arc::new(deeperseeker::infra::metrics::Metrics::new());
     let tokenizer = deeperseeker::infra::tokenizer::Tokenizer::load();
@@ -166,6 +167,7 @@ async fn run_server(args: ServeArgs) -> Result<()> {
         client,
         pow_solver,
         in_flight,
+        client_gates,
         tera,
         live_log,
         metrics,

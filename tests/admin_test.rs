@@ -74,6 +74,7 @@ async fn spawn_server(tag: &str, upstream: &str) -> (String, Connection) {
         client: DeepSeekClient::with_base_url(upstream, 30, 5),
         pow_solver,
         in_flight: Arc::new(Mutex::new(HashMap::new())),
+        client_gates: Arc::new(Mutex::new(HashMap::new())),
         tera,
         live_log: Arc::new(LiveLog::new()),
         metrics: Arc::new(deeperseeker::infra::metrics::Metrics::new()),

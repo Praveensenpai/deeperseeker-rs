@@ -18,7 +18,8 @@ pub async fn init_usage_table(conn: &Connection) -> Result<()> {
                 cached_tokens INTEGER DEFAULT 0
             );
             CREATE INDEX IF NOT EXISTS idx_usage_date ON request_usage(date);
-            CREATE INDEX IF NOT EXISTS idx_usage_ts ON request_usage(timestamp);",
+            CREATE INDEX IF NOT EXISTS idx_usage_ts ON request_usage(timestamp);
+            CREATE INDEX IF NOT EXISTS idx_usage_client_key_ts ON request_usage(client_key_id, timestamp);",
         )?;
         let _ = c.execute(
             "ALTER TABLE request_usage ADD COLUMN cached_tokens INTEGER DEFAULT 0",

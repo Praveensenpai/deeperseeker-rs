@@ -99,7 +99,7 @@ pub async fn init_db(conn: &Connection) -> Result<()> {
             [],
         );
         let _ = c.execute(
-            "CREATE INDEX IF NOT EXISTS idx_usage_client_key ON request_usage(client_key_id)",
+            "CREATE INDEX IF NOT EXISTS idx_usage_client_key_ts ON request_usage(client_key_id, timestamp)",
             [],
         );
         // Cascade semantics for tokens deleted before this cleanup existed:

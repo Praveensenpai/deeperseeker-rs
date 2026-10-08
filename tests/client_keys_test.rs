@@ -73,6 +73,7 @@ async fn spawn_server(tag: &str) -> (String, Connection) {
         client: DeepSeekClient::new(),
         pow_solver,
         in_flight: Arc::new(Mutex::new(HashMap::new())),
+        client_gates: Arc::new(Mutex::new(HashMap::new())),
         tera,
         live_log: Arc::new(LiveLog::new()),
         metrics: Arc::new(deeperseeker::infra::metrics::Metrics::new()),
@@ -184,6 +185,66 @@ async fn master_key_still_authenticates() {
 
     assert_ne!(resp.status(), 401, "master key must authenticate");
     assert_ne!(resp.status(), 429, "master key has no quota");
+}
+
+#[tokio::test]
+async fn quota_gate_serializes_requests_for_one_key() {
+    // The admission gate is what makes the pre-request quota check exact:
+    // while one request for a key holds the gate, a second cannot be admitted
+    // until the first releases it. This test drives the gate directly so it
+    // needs no upstream.
+    let db = open_test_db("gate").await;
+    let config = test_config(&temp_db_path("gate"));
+    let state = AppState {
+        config: Arc::new(config),
+        db,
+        client: DeepSeekClient::new(),
+        pow_solver: Arc::new(
+            PowSolver::new(&deeperseeker::infra::assets::resolve_wasm_path(
+                "wasm/deepseek_pow_solver.wasm",
+            ))
+            .expect("pow solver"),
+        ),
+        in_flight: Arc::new(Mutex::new(HashMap::new())),
+        client_gates: Arc::new(Mutex::new(HashMap::new())),
+        tera: Arc::new(
+            Tera::new(&deeperseeker::infra::assets::resolve_templates_pattern()).expect("tera"),
+        ),
+        live_log: Arc::new(LiveLog::new()),
+        metrics: Arc::new(deeperseeker::infra::metrics::Metrics::new()),
+        tokenizer: deeperseeker::infra::tokenizer::Tokenizer::load(),
+    };
+
+    let first = state.acquire_client_gate(7).await.expect("first permit");
+
+    // A second acquisition for the same key must block while `first` is held.
+    let state2 = state.clone();
+    let waiter = tokio::spawn(async move {
+        let _second = state2.acquire_client_gate(7).await;
+        true
+    });
+
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    assert!(
+        !waiter.is_finished(),
+        "a second request for a quota-limited key must wait for the first"
+    );
+
+    drop(first);
+    let acquired = tokio::time::timeout(std::time::Duration::from_secs(2), waiter)
+        .await
+        .expect("second acquisition must complete after release")
+        .expect("join");
+    assert!(acquired);
+
+    // Distinct keys do not contend.
+    let a = state.acquire_client_gate(1).await;
+    let b = tokio::time::timeout(
+        std::time::Duration::from_millis(500),
+        state.acquire_client_gate(2),
+    )
+    .await;
+    assert!(a.is_some() && b.is_ok(), "different keys must not block");
 }
 
 #[tokio::test]

@@ -47,8 +47,8 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn anthropic_messages (State (state) : State < AppState > , auth : Option < Extension < ClientAuth > > , Json (req) : Json < AnthropicMessageRequest > ,) -> Result < Response , (StatusCode , Json < serde_json :: Value >) >
   ```
 
-### `src/api/chat.rs` (Role: api, Lines: 360)
-- **Responsibility**: Core api logic in src/api/chat.rs
+### `src/api/chat.rs` (Role: api, Lines: 403)
+- **Responsibility**: Chat completion entry; acquires the token in-flight guard, threads it into streaming/unary handlers, and classifies `AttemptError::TooLong` as a 400 `context_length_exceeded` without touching the pool
 - **Imports**: use crate :: api :: chat_stream :: handle_streaming_response , use crate :: api :: chat_support :: { handle_token_auth_failure , pace_token_request } , use crate :: api :: chat_unary :: handle_unary_response , use crate :: api :: middleware :: ClientAuth , use crate :: api :: state :: AppState , use crate :: domain :: openai :: ChatCompletionRequest , use crate :: domain :: session :: compute_signature , use crate :: domain :: token :: Token , use crate :: domain :: upstream :: is_auth_failure , use crate :: infra :: db :: { mark_active , mark_limited , pick_token , touch_token } , use crate :: infra :: deepseek_client :: CompletionArgs , use crate :: infra :: media :: { resolve_message_media , MediaContext } , use crate :: infra :: prompt :: build_prompt_for_turn , use crate :: infra :: session_db :: find_session , use axum :: { extract :: { Extension , State } , http :: StatusCode , response :: Response , Json , } , use serde_json :: json 
 - **Public Functions & Signatures**:
   ```rust
@@ -73,20 +73,25 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn current_timestamp () -> u64
   ```
 
-### `src/api/chat_stream.rs` (Role: api, Lines: 393)
-- **Responsibility**: Core api logic in src/api/chat_stream.rs
-- **Imports**: use crate :: api :: chat_chunks :: { build_terminal_chunk , create_openai_chunks , current_timestamp , make_reasoning_chunk , make_text_chunk , make_tool_calls_chunk , } , use crate :: api :: live_log :: { render_input , LogFinish , LogHandle , LogSeed } , use crate :: api :: state :: AppState , use crate :: domain :: openai :: ChatMessage , use crate :: domain :: session :: { compute_next_signature , next_parent_id , Session } , use crate :: infra :: dsml :: { find_dsml_block_start , parse_dsml , safe_unambiguous_len , ParsedDsml } , use crate :: infra :: session_db :: save_session , pub use crate :: infra :: sse :: { drain_sse_lines , extract_chunks_from_event , parse_sse_line , ExtractedChunk , SseLineResult , } , use crate :: infra :: tokenizer :: { count_message_tokens , Tokenizer } , use crate :: infra :: usage_db :: record_usage_attributed , use axum :: { body :: Body , http :: { header :: CONTENT_TYPE , StatusCode } , response :: Response , } , use futures :: StreamExt , use uuid :: Uuid 
+### `src/api/chat_stream.rs` (Role: api, Lines: 496)
+- **Responsibility**: Streaming SSE handler; peeks upstream for a context overflow before committing the response (returns HTTP 400 so clients can auto-compact), holds the token in-flight guard for the stream's lifetime, and retries empty streams without retiring tokens
+- **Imports**: use crate :: api :: chat_chunks :: { build_terminal_chunk , create_openai_chunks , current_timestamp , make_reasoning_chunk , make_text_chunk , make_tool_calls_chunk , } , use crate :: api :: live_log :: { render_input , LogFinish , LogHandle , LogSeed } , use crate :: api :: state :: AppState , use crate :: domain :: openai :: ChatMessage , use crate :: domain :: session :: { compute_next_signature , next_parent_id , Session } , use crate :: infra :: dsml :: { find_dsml_block_start , parse_dsml , safe_unambiguous_len , ParsedDsml } , use crate :: infra :: session_db :: save_session , pub use crate :: infra :: sse :: { drain_sse_lines , extract_chunks_from_event , parse_sse_line , ExtractedChunk , SseLineResult , } , use crate :: infra :: tokenizer :: { count_message_tokens , Tokenizer } , use crate :: infra :: usage_db :: record_usage_attributed , use axum :: { body :: Body , http :: { header :: CONTENT_TYPE , StatusCode } , response :: Response , } , use bytes :: Bytes , use futures :: { stream , StreamExt } , use std :: pin :: Pin , use uuid :: Uuid 
+- **Types & Enums**:
+  ```rust
+  pub struct StreamArgs
+  ```
 - **Public Functions & Signatures**:
   ```rust
-  async fn handle_streaming_response (state : & AppState , req : crate :: domain :: openai :: ChatCompletionRequest , token_id : i64 , session_id : String , parent_id : i64 , upstream_resp : reqwest :: Response , client_key_id : Option < i64 > ,) -> Result < Response , (StatusCode , String) >
+  async fn handle_streaming_response (state : & AppState , args : StreamArgs ,) -> Result < Response , (StatusCode , String) >
+  async fn peek_upstream < S > (stream : & mut S) -> (Vec < Bytes > , Option < String >)
   ```
 
 ### `src/api/chat_support.rs` (Role: api, Lines: 56)
 - **Responsibility**: Core api logic in src/api/chat_support.rs
 - **Imports**: use crate :: api :: state :: AppState , use crate :: domain :: upstream :: is_auth_failure , use crate :: infra :: db :: { mark_expired , mark_limited } 
 
-### `src/api/chat_unary.rs` (Role: api, Lines: 183)
-- **Responsibility**: Core api logic in src/api/chat_unary.rs
+### `src/api/chat_unary.rs` (Role: api, Lines: 182)
+- **Responsibility**: Unary chat completion; captures the upstream error message from the SSE body so context-overflow rejections can be classified instead of surfacing as a generic 429
 - **Imports**: use crate :: api :: chat_chunks :: { build_chat_response , ChatResponseArgs } , use crate :: api :: chat_stream :: { compute_cached_tokens , save_stream_session } , use crate :: api :: live_log :: { render_input , LogFinish , LogSeed } , use crate :: api :: state :: AppState , use crate :: domain :: openai :: ChatMessage , use crate :: infra :: dsml :: parse_dsml , pub use crate :: infra :: sse :: { drain_sse_lines , parse_sse_line , SseLineResult } , use crate :: infra :: tokenizer :: count_message_tokens , use crate :: infra :: usage_db :: record_usage_attributed , use axum :: http :: StatusCode , use axum :: response :: { IntoResponse , Response } , use axum :: Json , use futures :: StreamExt 
 - **Types & Enums**:
   ```rust
@@ -192,9 +197,9 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn get_metrics (State (state) : State < AppState >) -> Response
   ```
 
-### `src/api/middleware.rs` (Role: api, Lines: 105)
-- **Responsibility**: Core api logic in src/api/middleware.rs
-- **Imports**: use crate :: api :: state :: AppState , use crate :: infra :: client_keys :: { find_active_by_plaintext , touch_client_key , window_usage_tokens } , use axum :: { extract :: { Request , State } , http :: { header :: AUTHORIZATION , header :: CONTENT_TYPE , header :: RETRY_AFTER , StatusCode } , middleware :: Next , response :: { IntoResponse , Response } , Json , } , use serde_json :: json 
+### `src/api/middleware.rs` (Role: api, Lines: 137)
+- **Responsibility**: Bearer auth + client-key quota enforcement; serializes quota-limited keys behind a per-key admission gate held for the response body's lifetime
+- **Imports**: use crate :: api :: state :: AppState , use crate :: infra :: client_keys :: { find_active_by_plaintext , touch_client_key , window_usage_tokens } , use axum :: { body :: Body , extract :: { Request , State } , http :: { header :: AUTHORIZATION , header :: CONTENT_TYPE , header :: RETRY_AFTER , StatusCode } , middleware :: Next , response :: { IntoResponse , Response } , Json , } , use futures :: StreamExt , use serde_json :: json , use tokio :: sync :: OwnedSemaphorePermit 
 - **Types & Enums**:
   ```rust
   pub struct ClientAuth
@@ -202,6 +207,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
 - **Public Functions & Signatures**:
   ```rust
   async fn require_api_key (State (state) : State < AppState > , mut req : Request , next : Next ,) -> Response
+  fn hold_permit_until_body_done (response : Response , permit : OwnedSemaphorePermit) -> Response
   ```
 
 ### `src/api/models.rs` (Role: api, Lines: 31)
@@ -212,17 +218,18 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn list_models () -> impl IntoResponse
   ```
 
-### `src/api/state.rs` (Role: api, Lines: 45)
-- **Responsibility**: Core api logic in src/api/state.rs
-- **Imports**: use crate :: api :: live_log :: LiveLog , use crate :: config :: AppConfig , use crate :: infra :: deepseek_client :: DeepSeekClient , use crate :: infra :: pow :: PowSolver , use crate :: infra :: tokenizer :: Tokenizer , use std :: collections :: HashMap , use std :: sync :: Arc , use tera :: Tera , use tokio :: sync :: Mutex , use tokio_rusqlite :: Connection 
+### `src/api/state.rs` (Role: api, Lines: 144)
+- **Responsibility**: Shared app state; RAII in-flight counters and per-client quota admission gates
+- **Imports**: use crate :: api :: live_log :: LiveLog , use crate :: config :: AppConfig , use crate :: infra :: deepseek_client :: DeepSeekClient , use crate :: infra :: pow :: PowSolver , use crate :: infra :: tokenizer :: Tokenizer , use std :: collections :: HashMap , use std :: sync :: Arc , use tera :: Tera , use tokio :: sync :: { Mutex , OwnedSemaphorePermit , Semaphore } , use tokio_rusqlite :: Connection 
 - **Types & Enums**:
   ```rust
   pub struct AppState
+  pub struct CounterGuard
   ```
 - **Public Functions & Signatures**:
   ```rust
-  async fn increment_in_flight (& self , token_id : i64)
-  async fn decrement_in_flight (& self , token_id : i64)
+  async fn begin_token_request (& self , token_id : i64) -> CounterGuard
+  async fn acquire_client_gate (& self , key_id : i64) -> Option < OwnedSemaphorePermit >
   async fn get_in_flight_snapshot (& self) -> HashMap < i64 , usize >
   ```
 
@@ -254,8 +261,8 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn get_usage_metrics (State (state) : State < AppState > , Query (query) : Query < UsageQuery > ,) -> impl IntoResponse
   ```
 
-### `src/api.rs` (Role: api, Lines: 104)
-- **Responsibility**: Core api logic in src/api.rs
+### `src/api.rs` (Role: api, Lines: 109)
+- **Responsibility**: Router assembly; API routes carry a 64 MB DefaultBodyLimit for long-context prompts
 - **Imports**: use crate :: api :: admin :: { add_token as admin_add_token , delete_token as admin_delete_token , get_pool , get_token as admin_get_token , list_tokens as admin_list_tokens , require_admin_key , reset_token as admin_reset_token , set_status as admin_set_status , update_token as admin_update_token , verify_token as admin_verify_token , } , use crate :: api :: anthropic :: anthropic_messages , use crate :: api :: chat :: chat_completions , use crate :: api :: client_key_admin :: { add_client_key , delete_client_key , revoke_client_key } , use crate :: api :: dashboard :: { logout , show_dashboard , show_login , submit_login } , use crate :: api :: files :: { upload_file_anthropic , upload_file_openai } , use crate :: api :: health :: { health , root } , use crate :: api :: logs :: { get_logs , stream_logs } , use crate :: api :: metrics :: get_metrics , use crate :: api :: middleware :: require_api_key , use crate :: api :: models :: list_models , use crate :: api :: state :: AppState , use crate :: api :: token_admin :: { add_token , delete_token , edit_token , verify_token } , use crate :: api :: usage :: get_usage_metrics , use axum :: { middleware :: from_fn_with_state , routing :: { get , post } , Router , } , use tower_http :: cors :: CorsLayer , use tower_http :: services :: ServeDir 
 - **Public Functions & Signatures**:
   ```rust
@@ -441,8 +448,8 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn masked_token (& self) -> String
   ```
 
-### `src/domain/upstream.rs` (Role: domain, Lines: 97)
-- **Responsibility**: Core domain logic in src/domain/upstream.rs
+### `src/domain/upstream.rs` (Role: domain, Lines: 159)
+- **Responsibility**: Upstream response types and error classification (`is_auth_failure`, `is_context_overflow`/`is_context_overflow_msg`)
 - **Imports**: use serde :: { Deserialize , Serialize } 
 - **Types & Enums**:
   ```rust
@@ -460,6 +467,8 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   ```rust
   fn extract_data (self) -> anyhow :: Result < T >
   fn is_auth_failure (err : & anyhow :: Error) -> bool
+  fn is_context_overflow_msg (msg : & str) -> bool
+  fn is_context_overflow (err : & anyhow :: Error) -> bool
   ```
 
 ### `src/domain/usage.rs` (Role: domain, Lines: 100)
@@ -513,7 +522,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   ```
 
 ### `src/infra/db.rs` (Role: infra, Lines: 377)
-- **Responsibility**: Core infra logic in src/infra/db.rs
+- **Responsibility**: Token pool persistence and scheduling; schema/init maintains the `(client_key_id, timestamp)` usage index
 - **Imports**: use crate :: domain :: token :: Token , use anyhow :: { Context , Result } , use rusqlite :: params , use std :: collections :: HashMap , use std :: time :: { SystemTime , UNIX_EPOCH } , use tokio_rusqlite :: Connection 
 - **Public Functions & Signatures**:
   ```rust
@@ -695,8 +704,8 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn count_message_tokens (tokenizer : & Tokenizer , messages : & [ChatMessage]) -> u32
   ```
 
-### `src/infra/usage_db.rs` (Role: infra, Lines: 282)
-- **Responsibility**: Core infra logic in src/infra/usage_db.rs
+### `src/infra/usage_db.rs` (Role: infra, Lines: 283)
+- **Responsibility**: Usage recording and aggregation; maintains the `(client_key_id, timestamp)` composite index for rolling-window quota sums
 - **Imports**: use crate :: domain :: usage :: { DailyUsage , ModelUsage , TokenUsage , UsageFilter , UsageSummary } , use anyhow :: { Context , Result } , use rusqlite :: params , use tokio_rusqlite :: Connection 
 - **Public Functions & Signatures**:
   ```rust
@@ -729,8 +738,8 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
 ### `src/lib.rs` (Role: general, Lines: 6)
 - **Responsibility**: Core general logic in src/lib.rs
 
-### `src/main.rs` (Role: general, Lines: 220)
-- **Responsibility**: Core general logic in src/main.rs
+### `src/main.rs` (Role: general, Lines: 222)
+- **Responsibility**: CLI dispatch and server bootstrap; initializes in-flight counters and per-client quota gates
 - **Imports**: use anyhow :: { Context , Result } , use clap :: Parser , use deeperseeker :: api :: build_router , use deeperseeker :: api :: state :: AppState , use deeperseeker :: cli :: diagnostic :: run_diagnostics , use deeperseeker :: cli :: service :: { install_user_service , service_status , uninstall_user_service } , use deeperseeker :: cli :: token_cmd :: { add_token , edit_token , list_tokens , remove_token , reset_token_usage , test_tokens , } , use deeperseeker :: cli :: usage_cmd :: display_usage , use deeperseeker :: cli :: { Cli , Commands , ServeArgs , ServiceArgs , ServiceSubcommands , TokenArgs , TokenSubcommands , UpdateArgs , } , use deeperseeker :: config :: AppConfig , use deeperseeker :: infra :: db :: { init_db , open_db } , use deeperseeker :: infra :: deepseek_client :: DeepSeekClient , use deeperseeker :: infra :: pow :: PowSolver , use deeperseeker :: tui :: run_status , use std :: collections :: HashMap , use std :: sync :: Arc , use tera :: Tera , use tokio :: net :: TcpListener , use tokio :: sync :: Mutex , use tracing :: info 
 
 ### `src/tui/tabs.rs` (Role: tui, Lines: 343)

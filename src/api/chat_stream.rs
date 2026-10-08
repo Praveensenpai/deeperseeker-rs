@@ -18,7 +18,9 @@ use axum::{
     http::{header::CONTENT_TYPE, StatusCode},
     response::Response,
 };
-use futures::StreamExt;
+use bytes::Bytes;
+use futures::{stream, StreamExt};
+use std::pin::Pin;
 use uuid::Uuid;
 
 struct StreamContext<'a> {
@@ -36,15 +38,30 @@ struct StreamState {
     pub reasoning: String,
 }
 
+/// Identity and upstream handle for one streaming completion attempt.
+pub struct StreamArgs {
+    pub req: crate::domain::openai::ChatCompletionRequest,
+    pub token_id: i64,
+    pub session_id: String,
+    pub parent_id: i64,
+    pub upstream_resp: reqwest::Response,
+    pub client_key_id: Option<i64>,
+    pub guard: crate::api::state::CounterGuard,
+}
+
 pub async fn handle_streaming_response(
     state: &AppState,
-    req: crate::domain::openai::ChatCompletionRequest,
-    token_id: i64,
-    session_id: String,
-    parent_id: i64,
-    upstream_resp: reqwest::Response,
-    client_key_id: Option<i64>,
+    args: StreamArgs,
 ) -> Result<Response, (StatusCode, String)> {
+    let StreamArgs {
+        req,
+        token_id,
+        session_id,
+        parent_id,
+        upstream_resp,
+        client_key_id,
+        guard,
+    } = args;
     let chat_id = format!("chatcmpl-{}", Uuid::new_v4());
     let created = current_timestamp();
     let db = state.db.clone();
@@ -59,21 +76,35 @@ pub async fn handle_streaming_response(
 
     let prompt_tokens = count_message_tokens(&state.tokenizer, &req.messages);
 
+    // Peek the upstream stream before committing to a 200 SSE response. A
+    // context-length rejection must reach the client as a real HTTP error so
+    // auto-compacting clients recognize it; once the SSE response is committed
+    // only an in-band frame is possible, which those clients do not parse.
+    let mut peek_stream = Box::pin(upstream_resp.bytes_stream());
+    let (peeked, overflow) = peek_upstream(&mut peek_stream).await;
+    if let Some(msg) = overflow {
+        log.fail(msg.clone());
+        return Err((StatusCode::BAD_REQUEST, msg));
+    }
+
     let sse_stream = async_stream::stream! {
-        let mut cur_resp = upstream_resp;
+        // Owned by the stream: the in-flight slot is held until this body is
+        // fully consumed (or dropped), so the scheduler sees the real load.
+        let _guard = guard;
+        let mut cur_stream: Pin<Box<dyn futures::Stream<Item = Result<Bytes, reqwest::Error>> + Send>> =
+            Box::pin(stream::iter(peeked.into_iter().map(Ok)).chain(peek_stream));
         let mut cur_sess = session_id;
         let mut cur_parent = parent_id;
         let mut cur_tok = token_id;
         let ctx = StreamContext { chat_id: &chat_id, created, model: &req.model };
 
         for attempt in 0..4 {
-            let mut byte_stream = cur_resp.bytes_stream();
             let mut buffer = String::new();
             let mut think_open = false;
             let mut stream_state = StreamState::default();
             let mut raw_lines = Vec::new();
 
-            'outer: while let Some(chunk_res) = byte_stream.next().await {
+            'outer: while let Some(chunk_res) = cur_stream.next().await {
                 let Ok(bytes) = chunk_res else {
                     tracing::warn!("Upstream stream dropped mid-generation");
                     break 'outer;
@@ -115,6 +146,25 @@ pub async fn handle_streaming_response(
                 return;
             }
 
+            // A too-long prompt is identical for every token: never retry it
+            // against another token, and surface a recognizable error so
+            // auto-compacting clients can recover.
+            if let Some(err) = &stream_state.upstream_error {
+                if crate::domain::upstream::is_context_overflow_msg(err) {
+                    let err_obj = serde_json::json!({
+                        "error": {
+                            "message": err,
+                            "type": "invalid_request_error",
+                            "code": "context_length_exceeded"
+                        }
+                    });
+                    log.fail(err.clone());
+                    yield Ok(format!("data: {err_obj}\n\n"));
+                    yield Ok("data: [DONE]\n\n".to_string());
+                    return;
+                }
+            }
+
             tracing::warn!(
                 "Stream produced 0 tokens (attempt {attempt}). Raw lines: {:?}",
                 raw_lines
@@ -137,7 +187,12 @@ pub async fn handle_streaming_response(
                 tracing::warn!("Retrying with fresh session after {wait_ms}ms...");
                 let _ = crate::infra::session_db::delete_sessions_for_chat(&db, cur_tok, &cur_sess).await;
 
-                let _ = crate::infra::db::mark_limited(&db, cur_tok, state.config.cookie_cooldown).await;
+                // An empty stream is almost always a transient upstream hiccup
+                // (or a stale session), not a bad credential. Retire the session
+                // and try a different token, but leave the token ACTIVE — only a
+                // confirmed auth failure may cool a token down. The old code
+                // marked every token RATE_LIMITED on a blank response, so four
+                // hiccups could sideline four healthy accounts at once.
                 let exclude = vec![cur_tok];
 
                 tokio::time::sleep(std::time::Duration::from_millis(wait_ms)).await;
@@ -148,7 +203,7 @@ pub async fn handle_streaming_response(
                             cur_sess = fresh_prep.session_id;
                             cur_parent = 0;
                             cur_tok = fresh_prep.token.id;
-                            cur_resp = new_resp;
+                            cur_stream = Box::pin(new_resp.bytes_stream());
                             log.reset_output();
                             continue;
                         }
@@ -162,10 +217,12 @@ pub async fn handle_streaming_response(
                 .upstream_error
                 .clone()
                 .unwrap_or_else(|| "DeepSeek returned empty completion".to_string());
-            let is_rate_limit = err_msg.contains("Too many requests")
+            let (err_type, err_code) = if crate::domain::upstream::is_context_overflow_msg(&err_msg) {
+                ("invalid_request_error", "context_length_exceeded")
+            } else if err_msg.contains("Too many requests")
                 || err_msg.contains("being generated")
-                || err_msg.contains("rate limit");
-            let (err_type, err_code) = if is_rate_limit {
+                || err_msg.contains("rate limit")
+            {
                 ("rate_limit_error", "rate_limit_exceeded")
             } else {
                 ("upstream_error", "upstream_error")
@@ -184,6 +241,52 @@ pub async fn handle_streaming_response(
         .header(CONTENT_TYPE, "text/event-stream")
         .body(Body::from_stream(sse_stream))
         .unwrap_or_default())
+}
+
+/// Read ahead on the upstream SSE stream far enough to detect a terminal
+/// context-overflow rejection, which upstream emits before any content.
+///
+/// Returns the chunks consumed so the caller can replay them ahead of the
+/// untouched remainder, plus the overflow message when one was seen. Content
+/// starting (or `[DONE]`) ends the peek immediately so normal streams pay only
+/// a tiny, bounded delay.
+async fn peek_upstream<S>(stream: &mut S) -> (Vec<Bytes>, Option<String>)
+where
+    S: futures::Stream<Item = Result<Bytes, reqwest::Error>> + Unpin,
+{
+    let mut read: Vec<Bytes> = Vec::new();
+    let mut buffer = String::new();
+    let mut think_open = false;
+
+    for _ in 0..16 {
+        let Some(chunk) = stream.next().await else {
+            break;
+        };
+        let Ok(bytes) = chunk else {
+            break;
+        };
+        for line in drain_sse_lines(&mut buffer, &bytes) {
+            match parse_sse_line(&line, &mut think_open) {
+                SseLineResult::Error(_, msg) => {
+                    if crate::domain::upstream::is_context_overflow_msg(&msg) {
+                        read.push(bytes.clone());
+                        return (read, Some(msg));
+                    }
+                }
+                SseLineResult::Chunks(chunks) if !chunks.is_empty() => {
+                    read.push(bytes.clone());
+                    return (read, None);
+                }
+                SseLineResult::Done => {
+                    read.push(bytes.clone());
+                    return (read, None);
+                }
+                _ => {}
+            }
+        }
+        read.push(bytes);
+    }
+    (read, None)
 }
 
 fn process_chunks(

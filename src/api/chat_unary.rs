@@ -45,7 +45,7 @@ pub async fn handle_unary_response(
         input: render_input(req_messages),
     });
 
-    let (full_content, full_reasoning) = read_unary_body(upstream_resp).await;
+    let (full_content, full_reasoning, upstream_error) = read_unary_body(upstream_resp).await;
     let (raw_content, reasoning) = finalize_content(&full_content, &full_reasoning);
     let parsed = parse_dsml(&raw_content);
 
@@ -53,11 +53,10 @@ pub async fn handle_unary_response(
         let _ =
             crate::infra::session_db::delete_sessions_for_chat(&state.db, token_id, &session_id)
                 .await;
-        log.fail("DeepSeek returned empty completion");
-        return Err((
-            StatusCode::TOO_MANY_REQUESTS,
-            "DeepSeek returned empty completion".to_string(),
-        ));
+        let reason =
+            upstream_error.unwrap_or_else(|| "DeepSeek returned empty completion".to_string());
+        log.fail(&reason);
+        return Err((StatusCode::TOO_MANY_REQUESTS, reason));
     }
 
     save_stream_session(
@@ -120,7 +119,7 @@ pub async fn handle_unary_response(
     Ok(Json(resp).into_response())
 }
 
-async fn read_unary_body(upstream_resp: reqwest::Response) -> (String, String) {
+async fn read_unary_body(upstream_resp: reqwest::Response) -> (String, String, Option<String>) {
     let mut byte_stream = upstream_resp.bytes_stream();
     let (mut full_content, mut full_reasoning, mut buffer) =
         (String::new(), String::new(), String::new());
@@ -132,16 +131,16 @@ async fn read_unary_body(upstream_resp: reqwest::Response) -> (String, String) {
             break;
         };
         let lines = drain_sse_lines(&mut buffer, &bytes);
-        if process_unary_lines(
+        if let Some(err) = process_unary_lines(
             &lines,
             &mut think_open,
             &mut full_content,
             &mut full_reasoning,
         ) {
-            break;
+            return (full_content, full_reasoning, Some(err));
         }
     }
-    (full_content, full_reasoning)
+    (full_content, full_reasoning, None)
 }
 
 fn process_unary_lines(
@@ -149,13 +148,13 @@ fn process_unary_lines(
     think_open: &mut bool,
     full_content: &mut String,
     full_reasoning: &mut String,
-) -> bool {
+) -> Option<String> {
     for line in lines {
         match parse_sse_line(line, think_open) {
-            SseLineResult::Done => return true,
+            SseLineResult::Done => return None,
             SseLineResult::Error(code, msg) => {
                 tracing::warn!("Upstream error in unary SSE (code {code}): {msg}");
-                return true;
+                return Some(msg);
             }
             SseLineResult::Chunks(chunks) => {
                 for item in chunks {
@@ -170,7 +169,7 @@ fn process_unary_lines(
             SseLineResult::None => {}
         }
     }
-    false
+    None
 }
 
 fn finalize_content(full_content: &str, full_reasoning: &str) -> (String, Option<String>) {

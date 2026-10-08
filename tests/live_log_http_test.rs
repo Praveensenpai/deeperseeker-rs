@@ -64,6 +64,7 @@ async fn spawn_server() -> (String, Arc<LiveLog>) {
         client: DeepSeekClient::new(),
         pow_solver,
         in_flight: Arc::new(Mutex::new(HashMap::new())),
+        client_gates: Arc::new(Mutex::new(HashMap::new())),
         tera,
         live_log: Arc::clone(&live_log),
         metrics: Arc::new(deeperseeker::infra::metrics::Metrics::new()),

@@ -66,6 +66,32 @@ fn non_sse_response() -> ResponseTemplate {
     )
 }
 
+/// A well-formed SSE stream that carries no content fragment.
+const EMPTY_SSE_BODY: &str = "data: [DONE]\n\n";
+
+fn empty_sse_response() -> ResponseTemplate {
+    ResponseTemplate::new(200).set_body_raw(EMPTY_SSE_BODY, "text/event-stream")
+}
+
+/// A transport-level context-overflow rejection: HTTP 200 with a JSON error
+/// body, which `send_completion_request` surfaces as an `Err`. The proxy must
+/// classify it as a client error, not a rate limit.
+fn context_overflow_non_sse_response() -> ResponseTemplate {
+    ResponseTemplate::new(200).set_body_raw(
+        r#"{"code":40004,"msg":"maximum context length exceeded","data":null}"#,
+        "application/json",
+    )
+}
+
+/// The same overflow signalled inside an SSE stream, as the streaming path
+/// sees it (non-zero `code` becomes an upstream error).
+const CONTEXT_OVERFLOW_SSE: &str =
+    "data: {\"code\":40004,\"msg\":\"maximum context length exceeded\",\"data\":null}\n\n";
+
+fn context_overflow_sse_response() -> ResponseTemplate {
+    ResponseTemplate::new(200).set_body_raw(CONTEXT_OVERFLOW_SSE, "text/event-stream")
+}
+
 /// Mount the three upstream endpoints. The completion responder is caller
 /// supplied so each test can control stream vs error behaviour.
 async fn mount_upstream(server: &MockServer, completion: ResponseTemplate) {
@@ -124,6 +150,7 @@ async fn spawn_app(upstream: &str, token_count: usize, label: &str) -> String {
         client: DeepSeekClient::with_base_url(upstream, 30, 5),
         pow_solver,
         in_flight: Arc::new(Mutex::new(HashMap::new())),
+        client_gates: Arc::new(Mutex::new(HashMap::new())),
         tera,
         live_log: Arc::new(LiveLog::new()),
         metrics: Arc::new(deeperseeker::infra::metrics::Metrics::new()),
@@ -272,6 +299,71 @@ async fn session_is_reused_across_turns() {
 }
 
 #[tokio::test]
+async fn empty_stream_does_not_retire_tokens() {
+    let server = MockServer::start().await;
+    // A well-formed SSE stream that never emits a content fragment yields a
+    // 0-token completion — the transient hiccup this fix targets.
+    mount_upstream(&server, empty_sse_response()).await;
+    let base = spawn_app(&server.uri(), 1, "empty_stream").await;
+
+    let resp = post_chat(
+        &base,
+        chat_body(true, serde_json::json!([{"role": "user", "content": "hi"}])),
+    )
+    .await;
+    // Drain the stream so its retry/cleanup path runs to completion.
+    let _ = resp.text().await;
+
+    // An empty upstream response is a transient hiccup, not a dead credential:
+    // the token must still be ACTIVE. The old code marked it RATE_LIMITED here,
+    // so a few blank responses could sideline the whole pool.
+    let pool: serde_json::Value = reqwest::Client::new()
+        .get(format!("{base}/api/admin/pool"))
+        .header("Authorization", "Bearer dseeker")
+        .send()
+        .await
+        .expect("pool request")
+        .json()
+        .await
+        .expect("pool json");
+    assert_eq!(
+        pool["pool"]["active"].as_u64().unwrap_or(0),
+        1,
+        "a token must remain ACTIVE after an empty stream: {pool}"
+    );
+    assert_eq!(
+        pool["pool"]["rate_limited"].as_u64().unwrap_or(0),
+        0,
+        "an empty stream must not rate-limit a token: {pool}"
+    );
+}
+
+#[tokio::test]
+async fn large_request_bodies_are_accepted() {
+    // Axum's 2 MB default body limit would reject the long contexts this
+    // proxy advertises. A ~3 MB message must not be turned into a 413.
+    let server = MockServer::start().await;
+    mount_upstream(&server, sse_response()).await;
+    let base = spawn_app(&server.uri(), 1, "large_body").await;
+
+    let filler = "word ".repeat(700_000); // ~3.5 MB of text
+    let resp = post_chat(
+        &base,
+        chat_body(
+            false,
+            serde_json::json!([{"role": "user", "content": filler}]),
+        ),
+    )
+    .await;
+
+    assert_ne!(
+        resp.status(),
+        reqwest::StatusCode::PAYLOAD_TOO_LARGE,
+        "a multi-megabyte prompt must not be rejected by the body limit"
+    );
+}
+
+#[tokio::test]
 async fn exhausted_tokens_return_429_with_retry_after() {
     let server = MockServer::start().await;
     // Every completion fails the SSE check, so each attempt rate-limits a
@@ -302,5 +394,102 @@ async fn exhausted_tokens_return_429_with_retry_after() {
     assert!(
         body["error"]["retry_after"].as_u64().unwrap_or(0) > 0,
         "body must advertise the retry delay: {body}"
+    );
+}
+
+#[tokio::test]
+async fn context_overflow_is_a_client_error_not_a_rate_limit() {
+    let server = MockServer::start().await;
+    // Every token sees the same too-long rejection. The proxy must not rotate
+    // the pool or cool anything down; it must return 400 context_length_exceeded
+    // so an auto-compacting client (OpenCode) can recover.
+    mount_upstream(&server, context_overflow_non_sse_response()).await;
+    let base = spawn_app(&server.uri(), 3, "ctx_overflow").await;
+
+    let resp = post_chat(
+        &base,
+        chat_body(
+            false,
+            serde_json::json!([{"role": "user", "content": "hi"}]),
+        ),
+    )
+    .await;
+
+    assert_eq!(
+        resp.status(),
+        400,
+        "a context overflow must surface as 400, not 429"
+    );
+    let body: serde_json::Value = resp.json().await.expect("json body");
+    assert_eq!(body["error"]["code"], "context_length_exceeded");
+    assert_eq!(body["error"]["type"], "invalid_request_error");
+
+    // The pool must be untouched: no token cooled down, none rotated out.
+    let pool: serde_json::Value = reqwest::Client::new()
+        .get(format!("{base}/api/admin/pool"))
+        .header("Authorization", "Bearer dseeker")
+        .send()
+        .await
+        .expect("pool request")
+        .json()
+        .await
+        .expect("pool json");
+    assert_eq!(
+        pool["pool"]["rate_limited"].as_u64().unwrap_or(0),
+        0,
+        "a context overflow must not rate-limit any token: {pool}"
+    );
+    assert_eq!(
+        pool["pool"]["active"].as_u64().unwrap_or(0),
+        3,
+        "all tokens must stay ACTIVE after a context overflow: {pool}"
+    );
+}
+
+#[tokio::test]
+async fn streaming_context_overflow_is_not_retried() {
+    let server = MockServer::start().await;
+    mount_upstream(&server, context_overflow_sse_response()).await;
+    let base = spawn_app(&server.uri(), 3, "ctx_overflow_stream").await;
+
+    let resp = post_chat(
+        &base,
+        chat_body(true, serde_json::json!([{"role": "user", "content": "hi"}])),
+    )
+    .await;
+
+    // A streamed overflow must surface as a real HTTP error so the client's
+    // API-error classifier sees it; an in-band 200 SSE frame is not parsed by
+    // auto-compacting clients.
+    assert_eq!(
+        resp.status(),
+        400,
+        "a streaming context overflow must be a 400, not a 200 SSE frame"
+    );
+    let body: serde_json::Value = resp.json().await.expect("json error body");
+    assert_eq!(body["error"]["code"], "context_length_exceeded");
+    assert_eq!(body["error"]["type"], "invalid_request_error");
+
+    // The session-create mock is only mounted once by `mount_upstream`, so a
+    // retry would have attempted a fresh session. The pool check proves the
+    // token was not rotated or cooled down.
+    let pool: serde_json::Value = reqwest::Client::new()
+        .get(format!("{base}/api/admin/pool"))
+        .header("Authorization", "Bearer dseeker")
+        .send()
+        .await
+        .expect("pool request")
+        .json()
+        .await
+        .expect("pool json");
+    assert_eq!(
+        pool["pool"]["rate_limited"].as_u64().unwrap_or(0),
+        0,
+        "a streaming context overflow must not rate-limit a token: {pool}"
+    );
+    assert_eq!(
+        pool["pool"]["active"].as_u64().unwrap_or(0),
+        3,
+        "all tokens must stay ACTIVE after a streaming context overflow: {pool}"
     );
 }

@@ -50,6 +50,29 @@ pub fn is_auth_failure(err: &anyhow::Error) -> bool {
     s.contains("invalid token") || s.contains("authorization failed") || s.contains("40003")
 }
 
+/// Detect a provider rejection caused by the prompt exceeding the model's
+/// context window. Such a request is malformed for the chosen model, not a
+/// sign of a bad or rate-limited token, so it must not cool down the pool or
+/// be retried against another token. Clients that auto-compact (for example
+/// OpenCode) key off this class of error to recover.
+pub fn is_context_overflow_msg(msg: &str) -> bool {
+    let s = msg.to_lowercase();
+    // Deliberately context-specific: a bare "token limit" or "maximum length"
+    // can appear in a genuine rate-limit message, which must keep its own
+    // retry/cooldown semantics rather than become a client 400.
+    s.contains("context length")
+        || s.contains("context_length")
+        || s.contains("maximum context")
+        || s.contains("context window")
+        || s.contains("prompt is too long")
+        || s.contains("input is too long")
+        || s.contains("too many tokens")
+}
+
+pub fn is_context_overflow(err: &anyhow::Error) -> bool {
+    is_context_overflow_msg(&format!("{err:#}"))
+}
+
 pub type PowChallengeWrapper = DeepSeekApiResponse<PowChallengeBizData>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -94,4 +117,43 @@ pub struct FileRecord {
     pub file_id: String,
     pub token_id: i64,
     pub created_at: f64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn context_overflow_messages_are_detected() {
+        assert!(is_context_overflow_msg("maximum context length exceeded"));
+        assert!(is_context_overflow_msg(
+            "The prompt is too long for this model"
+        ));
+        assert!(is_context_overflow_msg("input is too long"));
+        assert!(is_context_overflow_msg("exceeded the context window"));
+        assert!(is_context_overflow_msg("too many tokens in request"));
+    }
+
+    #[test]
+    fn rate_limit_messages_are_not_misclassified_as_overflow() {
+        // These must keep their retry/cooldown semantics.
+        assert!(!is_context_overflow_msg("Too many requests"));
+        assert!(!is_context_overflow_msg(
+            "There is a message being generated"
+        ));
+        assert!(!is_context_overflow_msg("rate limit exceeded"));
+        assert!(!is_context_overflow_msg(
+            "DeepSeek returned empty completion"
+        ));
+    }
+
+    #[test]
+    fn anyhow_error_is_classified() {
+        let overflow = anyhow::anyhow!("DeepSeek upstream error: maximum context length exceeded");
+        assert!(is_context_overflow(&overflow));
+
+        let limited = anyhow::anyhow!("DeepSeek upstream HTTP 429: too many requests");
+        assert!(!is_context_overflow(&limited));
+        assert!(!is_auth_failure(&limited));
+    }
 }

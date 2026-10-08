@@ -38,6 +38,7 @@ use crate::api::state::AppState;
 use crate::api::token_admin::{add_token, delete_token, edit_token, verify_token};
 use crate::api::usage::get_usage_metrics;
 use axum::{
+    extract::DefaultBodyLimit,
     middleware::from_fn_with_state,
     routing::{get, post},
     Router,
@@ -51,6 +52,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/v1/messages", post(anthropic_messages))
         .route("/v1/files", post(upload_file_openai))
         .route("/v1/files/upload", post(upload_file_anthropic))
+        // Axum's 2 MB default body limit cannot carry the long contexts this
+        // proxy advertises (hundreds of thousands of tokens). 64 MB is a
+        // generous ceiling that still bounds memory per request.
+        .layer(DefaultBodyLimit::max(64 * 1024 * 1024))
         .route_layer(from_fn_with_state(state.clone(), require_api_key));
 
     let admin_routes = Router::new()

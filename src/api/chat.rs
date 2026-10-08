@@ -48,6 +48,22 @@ pub async fn chat_completions(
                 handle_token_auth_failure(&state, tok_id, &msg).await;
                 exclude.push(tok_id);
             }
+            Err(AttemptError::TooLong(msg)) => {
+                // A too-long prompt is the same for every token: surface a
+                // recognizable error so auto-compacting clients can recover,
+                // and leave the pool untouched.
+                state.metrics.record_error();
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({
+                        "error": {
+                            "message": msg,
+                            "type": "invalid_request_error",
+                            "code": "context_length_exceeded"
+                        }
+                    })),
+                ));
+            }
             Err(AttemptError::Fatal(status, msg)) => {
                 state.metrics.record_error();
                 return Err((status, Json(json!({"error": {"message": msg}}))));
@@ -77,6 +93,9 @@ pub async fn chat_completions(
 pub(crate) enum AttemptError {
     RateLimited(i64),
     InvalidToken(i64, String),
+    /// The prompt is too long for the model. Never token-specific, so it is
+    /// returned to the client without cooling down or rotating the pool.
+    TooLong(String),
     Fatal(StatusCode, String),
 }
 
@@ -95,12 +114,11 @@ async fn execute_completion_attempt(
 ) -> Result<Response, AttemptError> {
     let prep = prepare_session(state, req, exclude).await?;
     let token_id = prep.token.id;
-    state.increment_in_flight(token_id).await;
+    let guard = state.begin_token_request(token_id).await;
 
     pace_token_request(state, prep.token.last_used).await;
 
-    let res = run_chat_request(state, req, &prep, client_key_id).await;
-    state.decrement_in_flight(token_id).await;
+    let res = run_chat_request(state, req, &prep, client_key_id, guard).await;
 
     match res {
         Ok(resp) => {
@@ -109,6 +127,11 @@ async fn execute_completion_attempt(
             Ok(resp)
         }
         Err(e) => {
+            // A too-long prompt fails identically on a fresh session, so do not
+            // burn another upstream call on the resumed-session fallback.
+            if matches!(e, AttemptError::TooLong(_)) {
+                return Err(e);
+            }
             if !prep.is_first {
                 tracing::warn!(
                     "Resumed session {} failed ({:?}); deleting and falling back to fresh session",
@@ -123,10 +146,10 @@ async fn execute_completion_attempt(
                 .await;
                 let fresh_prep = create_fresh_session(state, req, exclude).await?;
                 let fresh_token_id = fresh_prep.token.id;
-                state.increment_in_flight(fresh_token_id).await;
+                let fresh_guard = state.begin_token_request(fresh_token_id).await;
                 pace_token_request(state, fresh_prep.token.last_used).await;
-                let fresh_res = run_chat_request(state, req, &fresh_prep, client_key_id).await;
-                state.decrement_in_flight(fresh_token_id).await;
+                let fresh_res =
+                    run_chat_request(state, req, &fresh_prep, client_key_id, fresh_guard).await;
                 if fresh_res.is_ok() {
                     let _ = touch_token(&state.db, fresh_token_id).await;
                     let _ = mark_active(&state.db, fresh_token_id).await;
@@ -250,6 +273,7 @@ async fn run_chat_request(
     req: &ChatCompletionRequest,
     prep: &PreparedSession,
     client_key_id: Option<i64>,
+    guard: crate::api::state::CounterGuard,
 ) -> Result<Response, AttemptError> {
     let args = prepare_completion_args(state, req, prep).await?;
     let resp = state
@@ -259,6 +283,8 @@ async fn run_chat_request(
         .map_err(|e| {
             if is_auth_failure(&e) {
                 AttemptError::InvalidToken(prep.token.id, e.to_string())
+            } else if crate::domain::upstream::is_context_overflow(&e) {
+                AttemptError::TooLong(format!("{e:#}"))
             } else {
                 AttemptError::RateLimited(prep.token.id)
             }
@@ -267,16 +293,29 @@ async fn run_chat_request(
     if req.stream {
         handle_streaming_response(
             state,
-            req.clone(),
-            prep.token.id,
-            prep.session_id.clone(),
-            prep.parent_id,
-            resp,
-            client_key_id,
+            crate::api::chat_stream::StreamArgs {
+                req: req.clone(),
+                token_id: prep.token.id,
+                session_id: prep.session_id.clone(),
+                parent_id: prep.parent_id,
+                upstream_resp: resp,
+                client_key_id,
+                guard,
+            },
         )
         .await
-        .map_err(|(sc, msg)| AttemptError::Fatal(sc, msg))
+        .map_err(|(sc, msg)| {
+            // A streamed context overflow must reach the client as a real
+            // HTTP error with the structured code, not a generic message.
+            if crate::domain::upstream::is_context_overflow_msg(&msg) {
+                AttemptError::TooLong(msg)
+            } else {
+                AttemptError::Fatal(sc, msg)
+            }
+        })
     } else {
+        // Held for the whole unary call; released when this scope returns.
+        let _guard = guard;
         handle_unary_response(
             state,
             crate::api::chat_unary::UnaryContext {
@@ -292,7 +331,11 @@ async fn run_chat_request(
         .await
         .map_err(|(sc, msg)| {
             if sc == StatusCode::TOO_MANY_REQUESTS {
-                AttemptError::RateLimited(prep.token.id)
+                if crate::domain::upstream::is_context_overflow_msg(&msg) {
+                    AttemptError::TooLong(msg)
+                } else {
+                    AttemptError::RateLimited(prep.token.id)
+                }
             } else {
                 AttemptError::Fatal(sc, msg)
             }
