@@ -12,7 +12,7 @@
 *Ultra-low latency, memory-efficient reverse proxy bridging DeepSeek's Web API to OpenAI and Claude compatible endpoints.*  
 *Rust rewrite of [DeeperSeeker](https://github.com/AmanCode22/deeperseeker) by [AmanCode22](https://github.com/AmanCode22).*
 
-[⚡ Quick Start](#-quick-start) • [🐳 Docker](#-docker-deployment) • [✨ Key Features](#-key-features) • [⚡ Why Rust?](#-why-deeperseeker-rs-rust-vs-python) • [🎥 Showcase](#-usage-showcase) • [🎨 Web Dashboard](#-web-administration-dashboard) • [🔑 DeepSeek Token Setup](#-deepseek-token-setup) • [💻 CLI Ergonomics](#-cli-ergonomics) • [📊 Token Usage Analytics](#-token-usage-analytics) • [🛠️ Admin API](#%EF%B8%8F-token-pool-admin-api) • [🏛️ Architecture](#%EF%B8%8F-architecture) • [🔌 API & Demos](#-api-usage) • [⚠️ Disclaimer](#%EF%B8%8F-disclaimer) • [🙏 Credits](#-acknowledgements--credits)
+[🐳 Docker](#-docker-recommended) • [⚡ Quick Start](#-quick-start) • [✨ Key Features](#-key-features) • [⚡ Why Rust?](#-why-deeperseeker-rs-rust-vs-python) • [🎥 Showcase](#-usage-showcase) • [🎨 Web Dashboard](#-web-administration-dashboard) • [🔑 DeepSeek Token Setup](#-deepseek-token-setup) • [💻 CLI Ergonomics](#-cli-ergonomics) • [📊 Token Usage Analytics](#-token-usage-analytics) • [🛠️ Admin API](#%EF%B8%8F-token-pool-admin-api) • [🏛️ Architecture](#%EF%B8%8F-architecture) • [🔌 API & Demos](#-api-usage) • [⚠️ Disclaimer](#%EF%B8%8F-disclaimer) • [🙏 Credits](#-acknowledgements--credits)
 
 </div>
 
@@ -25,6 +25,60 @@
 ---
 
 ## 🚀 Quick Start
+
+### 🐳 Docker (Recommended)
+
+Docker is the fastest, most reproducible way to run DeeperSeeker-RS. Your token pool, sessions, and usage history live in a named volume (`deeperseeker_data`), so upgrades never touch your data.
+
+#### Using Docker Compose
+
+```bash
+# Clone the repository
+git clone https://github.com/Praveensenpai/deeperseeker-rs.git
+cd deeperseeker-rs
+
+# Launch the container in the background
+docker compose up -d
+```
+
+#### Using the Docker CLI Directly
+
+Prefer the published image without cloning:
+
+```bash
+docker run -d \
+  --name deeperseeker \
+  -p 4000:4000 \
+  -v deeperseeker_data:/data \
+  -e DEEPSEEKER_API_KEY=dseeker \
+  -e DEEPSEEKER_ADMIN_USER=admin \
+  -e DEEPSEEKER_ADMIN_PASS=admin \
+  --restart unless-stopped \
+  ghcr.io/praveensenpai/deeperseeker-rs:latest
+```
+
+#### 🔄 Updating the Container
+
+Pull the latest image and recreate the container while keeping your database, tokens, and usage history:
+
+```bash
+docker compose pull && docker compose up -d --force-recreate
+```
+
+Or with the Docker CLI:
+
+```bash
+docker rm -f deeperseeker && \
+docker pull ghcr.io/praveensenpai/deeperseeker-rs:latest && \
+docker run -d \
+  --name deeperseeker \
+  -p 4000:4000 \
+  -v deeperseeker_data:/data \
+  --restart unless-stopped \
+  ghcr.io/praveensenpai/deeperseeker-rs:latest
+```
+
+All credentials and options are configured via environment variables (`DEEPSEEKER_API_KEY`, `DEEPSEEKER_ADMIN_PASS`, `DEEPSEEKER_REQUEST_GAP`). Request pacing is human-like by default: a 5s base gap with jitter, plus an occasional reading pause (`DEEPSEEKER_REQUEST_GAP_JITTER`, `DEEPSEEKER_HUMAN_PAUSE_CHANCE`, `DEEPSEEKER_HUMAN_PAUSE_MAX`).
 
 ### 🪄 One-Liner Magic (Pre-Built Linux x86_64 Binary)
 
@@ -49,48 +103,6 @@ cargo build --release
 ```
 
 The server listens on `http://127.0.0.1:4000` by default.
-
-### 🐳 Docker Deployment
-
-#### Using Docker Compose (Recommended)
-
-```bash
-# Clone the repository
-git clone https://github.com/Praveensenpai/deeperseeker-rs.git
-cd deeperseeker-rs
-
-# Launch the container in the background
-docker compose up -d
-```
-
-#### Using Docker CLI Directly
-
-```bash
-# Run with persistent volume mount for the SQLite database
-docker run -d \
-  --name deeperseeker \
-  -p 4000:4000 \
-  -v deeperseeker_data:/data \
-  --restart unless-stopped \
-  ghcr.io/praveensenpai/deeperseeker-rs:latest
-```
-
-#### 🔄 Updating the Container
-
-To upgrade an existing container to the latest release while keeping your database, tokens, and usage history intact:
-
-```bash
-docker rm -f deeperseeker && \
-docker pull ghcr.io/praveensenpai/deeperseeker-rs:latest && \
-docker run -d \
-  --name deeperseeker \
-  -p 4000:4000 \
-  -v deeperseeker_data:/data \
-  --restart unless-stopped \
-  ghcr.io/praveensenpai/deeperseeker-rs:latest
-```
-
-All credentials and options can be configured via environment variables (`DEEPSEEKER_API_KEY`, `DEEPSEEKER_ADMIN_PASS`, `DEEPSEEKER_REQUEST_GAP`). Request pacing is human-like by default: a 5s base gap with jitter, plus an occasional reading pause (`DEEPSEEKER_REQUEST_GAP_JITTER`, `DEEPSEEKER_HUMAN_PAUSE_CHANCE`, `DEEPSEEKER_HUMAN_PAUSE_MAX`).
 
 ---
 

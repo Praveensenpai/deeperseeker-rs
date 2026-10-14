@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 # ── Stage 1: Build binary ──
 FROM rust:bookworm AS builder
 
@@ -6,8 +8,12 @@ WORKDIR /usr/src/deeperseeker
 # Pre-copy manifests to cache dependency builds
 COPY Cargo.toml Cargo.lock ./
 
-# Create dummy skeleton for dependency layer caching
-RUN mkdir src && \
+# Create dummy skeleton for dependency-layer caching. BuildKit cache mounts
+# persist the cargo registry and target directory across builds, so only the
+# final crate recompiles when source changes.
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/src/deeperseeker/target \
+    mkdir src && \
     echo "fn main() {}" > src/main.rs && \
     echo "" > src/lib.rs && \
     cargo build --release && \
@@ -20,8 +26,13 @@ COPY static ./static
 COPY wasm ./wasm
 COPY assets ./assets
 
-# Re-touch source and compile production binary
-RUN touch src/main.rs src/lib.rs && cargo build --release
+# Re-touch source and compile the production binary, then lift it out of the
+# cache mount into an image layer so the runtime stage can copy it.
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/src/deeperseeker/target \
+    touch src/main.rs src/lib.rs && \
+    cargo build --release && \
+    cp target/release/deeperseeker /usr/local/bin/deeperseeker
 
 # ── Stage 2: Minimal runtime image ──
 FROM debian:bookworm-slim
@@ -38,7 +49,7 @@ RUN groupadd -g 1000 deeperseeker && \
 WORKDIR /app
 
 # Copy binary and assets from builder
-COPY --from=builder /usr/src/deeperseeker/target/release/deeperseeker /usr/local/bin/deeperseeker
+COPY --from=builder /usr/local/bin/deeperseeker /usr/local/bin/deeperseeker
 COPY --from=builder /usr/src/deeperseeker/templates ./templates
 COPY --from=builder /usr/src/deeperseeker/static ./static
 COPY --from=builder /usr/src/deeperseeker/wasm ./wasm
