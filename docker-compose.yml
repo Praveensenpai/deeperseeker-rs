@@ -20,7 +20,11 @@ services:
     volumes:
       - deeperseeker_data:/data
 
+# The data volume is managed manually (created by the documented `docker run`
+# command), so it is referenced as external. Compose will attach to it instead
+# of trying to create and own it, which keeps tokens and usage history safe
+# across `docker compose up` / `down` cycles.
 volumes:
   deeperseeker_data:
     name: deeperseeker_data
-    driver: local
+    external: true
