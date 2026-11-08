@@ -133,12 +133,25 @@ pub async fn add_token(State(state): State<AppState>, Json(body): Json<AddTokenB
     let tokens = get_tokens(&state.db)
         .await
         .map_err(|e| internal(&e.to_string()))?;
+    let total_count = tokens.len();
+    let active_count = tokens.iter().filter(|t| t.is_active()).count();
     match tokens.into_iter().rfind(|t| t.token == token) {
-        Some(tok) => Ok(Json(json!({
-            "status": "ok",
-            "message": "Token added",
-            "token": { "id": tok.id, "alias": tok.alias, "masked_token": tok.masked_token() }
-        }))),
+        Some(tok) => {
+            state.telegram.notify(
+                crate::domain::telegram::TelegramNotification::NewTokenAdded {
+                    id: tok.id,
+                    alias: tok.alias.clone(),
+                    masked: tok.masked_token(),
+                    active_count,
+                    total_count,
+                },
+            );
+            Ok(Json(json!({
+                "status": "ok",
+                "message": "Token added",
+                "token": { "id": tok.id, "alias": tok.alias, "masked_token": tok.masked_token() }
+            })))
+        }
         None => Ok(Json(json!({ "status": "ok", "message": "Token added" }))),
     }
 }

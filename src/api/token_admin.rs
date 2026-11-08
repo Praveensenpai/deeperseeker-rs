@@ -42,8 +42,22 @@ pub async fn add_token(
         .map(str::trim)
         .filter(|s| !s.is_empty());
 
-    if !token.is_empty() {
-        let _ = db_add_token(&state.db, token, alias).await;
+    if !token.is_empty() && db_add_token(&state.db, token, alias).await.is_ok() {
+        if let Ok(tokens) = crate::infra::db::get_tokens(&state.db).await {
+            let total_count = tokens.len();
+            let active_count = tokens.iter().filter(|t| t.is_active()).count();
+            if let Some(tok) = tokens.iter().find(|t| t.token == token) {
+                state.telegram.notify(
+                    crate::domain::telegram::TelegramNotification::NewTokenAdded {
+                        id: tok.id,
+                        alias: tok.alias.clone(),
+                        masked: tok.masked_token(),
+                        active_count,
+                        total_count,
+                    },
+                );
+            }
+        }
     }
 
     Redirect::to("/dashboard").into_response()
@@ -132,6 +146,18 @@ pub async fn verify_token(
         redirect_msg("Token verified: ACTIVE", true)
     } else {
         let _ = db_mark_expired(&state.db, token_id).await;
+        let active_count = crate::infra::db::get_tokens(&state.db)
+            .await
+            .map(|list| list.iter().filter(|t| t.is_active()).count())
+            .unwrap_or(0);
+        state.telegram.notify(
+            crate::domain::telegram::TelegramNotification::TokenExpired {
+                id: token_id,
+                alias: tok.alias.clone(),
+                reason: "Upstream verification failed".to_string(),
+                active_count,
+            },
+        );
         redirect_msg("Token verification failed: marked EXPIRED", false)
     }
 }

@@ -155,6 +155,11 @@ async fn spawn_app(upstream: &str, token_count: usize, label: &str) -> String {
         live_log: Arc::new(LiveLog::new()),
         metrics: Arc::new(deeperseeker::infra::metrics::Metrics::new()),
         tokenizer: deeperseeker::infra::tokenizer::Tokenizer::load(),
+        telegram: Arc::new(
+            deeperseeker::infra::telegram_notifier::TelegramNotifier::new(
+                deeperseeker::domain::telegram::TelegramSettings::default(),
+            ),
+        ),
     };
 
     let router = build_router(state);

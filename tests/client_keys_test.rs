@@ -78,6 +78,11 @@ async fn spawn_server(tag: &str) -> (String, Connection) {
         live_log: Arc::new(LiveLog::new()),
         metrics: Arc::new(deeperseeker::infra::metrics::Metrics::new()),
         tokenizer: deeperseeker::infra::tokenizer::Tokenizer::load(),
+        telegram: Arc::new(
+            deeperseeker::infra::telegram_notifier::TelegramNotifier::new(
+                deeperseeker::domain::telegram::TelegramSettings::default(),
+            ),
+        ),
     };
 
     let router = build_router(state);
@@ -213,6 +218,11 @@ async fn quota_gate_serializes_requests_for_one_key() {
         live_log: Arc::new(LiveLog::new()),
         metrics: Arc::new(deeperseeker::infra::metrics::Metrics::new()),
         tokenizer: deeperseeker::infra::tokenizer::Tokenizer::load(),
+        telegram: Arc::new(
+            deeperseeker::infra::telegram_notifier::TelegramNotifier::new(
+                deeperseeker::domain::telegram::TelegramSettings::default(),
+            ),
+        ),
     };
 
     let first = state.acquire_client_gate(7).await.expect("first permit");

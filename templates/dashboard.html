@@ -252,6 +252,62 @@
     {% endif %}
 </div>
 
+<!-- Telegram Bot Integration -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-cyan);"><path d="M21.5 2L2 9.5l7 3 3 7 9.5-17.5z"></path></svg>
+            Telegram Bot Integration & Alerts
+        </h2>
+        <div>
+            {% if telegram_configured | default(value=false) %}
+                {% if telegram_enabled | default(value=false) %}
+                    <span class="status-dot status-active" title="Active"></span>
+                    <span style="font-size: 0.8rem; color: var(--accent-emerald); font-weight: 600;">ACTIVE</span>
+                {% else %}
+                    <span class="status-dot status-limited" title="Disabled"></span>
+                    <span style="font-size: 0.8rem; color: var(--accent-amber); font-weight: 600;">DISABLED</span>
+                {% endif %}
+            {% else %}
+                <span class="status-dot status-expired" title="Not Configured"></span>
+                <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 500;">NOT CONFIGURED</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="token-guide-box">
+        <div class="guide-header">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+            <span>Real-time pool notifications & remote 2-way bot commands</span>
+        </div>
+        <p style="font-size: 0.82rem; color: var(--text-secondary); margin-top: 0.4rem; line-height: 1.45;">
+            Receive alerts when new tokens are added, when tokens expire, or when requests fail due to empty token pools (rate-limited and debounced).
+            You can also query the bot anytime via <code>/status</code>, <code>/tokens</code>, or <code>/usage</code>.
+        </p>
+    </div>
+
+    <form method="post" action="/telegram/settings">
+        <div class="form-row" style="align-items: center;">
+            <input type="text" name="bot_token" class="input-field" placeholder="Bot Token (e.g. 123456:ABC-DEF...){% if telegram_bot_token_masked | default(value='') %} [Current: {{ telegram_bot_token_masked }}]{% endif %}" style="flex: 2; min-width: 260px;">
+            <input type="text" name="chat_id" class="input-field" value="{{ telegram_chat_id | default(value='') }}" placeholder="Target Chat ID (e.g. 123456789)" style="flex: 1; min-width: 180px;">
+            <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: var(--text-primary); cursor: pointer; user-select: none;">
+                <input type="checkbox" name="enabled" {% if telegram_enabled | default(value=false) %}checked{% endif %} style="accent-color: var(--accent-cyan); width: 16px; height: 16px;">
+                Enable Alerts
+            </label>
+            <button type="submit" class="btn-primary">Save Settings</button>
+        </div>
+    </form>
+
+    {% if telegram_configured | default(value=false) %}
+    <div style="margin-top: 1rem; display: flex; align-items: center; justify-content: flex-end; gap: 0.75rem;">
+        <span style="font-size: 0.78rem; color: var(--text-muted);">Current Token: <code>{{ telegram_bot_token_masked | default(value='') }}</code></span>
+        <form method="post" action="/telegram/test" style="display: inline;">
+            <button type="submit" class="btn-ghost" style="border: 1px solid var(--border-subtle); padding: 0.45rem 0.9rem; font-size: 0.8rem;">Send Test Notification</button>
+        </form>
+    </div>
+    {% endif %}
+</div>
+
 <!-- Token Usage Analytics Table -->
 <div class="card">
     <div class="card-header">

@@ -79,6 +79,11 @@ async fn spawn_server(tag: &str, upstream: &str) -> (String, Connection) {
         live_log: Arc::new(LiveLog::new()),
         metrics: Arc::new(deeperseeker::infra::metrics::Metrics::new()),
         tokenizer: deeperseeker::infra::tokenizer::Tokenizer::load(),
+        telegram: Arc::new(
+            deeperseeker::infra::telegram_notifier::TelegramNotifier::new(
+                deeperseeker::domain::telegram::TelegramSettings::default(),
+            ),
+        ),
     };
 
     let router = build_router(state);

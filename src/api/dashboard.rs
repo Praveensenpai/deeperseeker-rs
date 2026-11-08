@@ -146,6 +146,7 @@ pub async fn show_dashboard(
         None => ("0.0%".to_string(), "0".to_string()),
     };
     let summary_views = map_summary_views(&summaries);
+    let tg_settings = state.telegram.current_settings().await;
 
     let mut ctx = Context::new();
     ctx.insert("tokens", &views);
@@ -160,6 +161,10 @@ pub async fn show_dashboard(
     ctx.insert("port", &state.config.port);
     ctx.insert("api_key", &state.config.api_key);
     ctx.insert("new_key", &query.new_key);
+    ctx.insert("telegram_bot_token_masked", &tg_settings.masked_token());
+    ctx.insert("telegram_chat_id", &tg_settings.chat_id);
+    ctx.insert("telegram_enabled", &tg_settings.enabled);
+    ctx.insert("telegram_configured", &tg_settings.is_configured());
     ctx.insert("flash_msg", &query.msg);
     ctx.insert("flash_ok", &(query.ok.as_deref() == Some("1")));
     let rendered = state

@@ -1,0 +1,220 @@
+use crate::api::state::AppState;
+use crate::domain::usage::format_metric;
+use crate::infra::db::{get_tokens, now_timestamp};
+use crate::infra::telegram_client::{TelegramClient, TelegramUpdate};
+use crate::infra::usage_db::{get_all_summaries, get_token_usages};
+use std::collections::HashMap;
+use std::time::Duration;
+
+pub fn start_telegram_bot_poller(state: AppState) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let client = TelegramClient::new();
+        let mut offset = 0i64;
+
+        loop {
+            let settings = state.telegram.current_settings().await;
+            if !settings.is_configured() {
+                tokio::time::sleep(Duration::from_secs(5)).await;
+                continue;
+            }
+
+            match client.get_updates(&settings.bot_token, offset, 25).await {
+                Ok(updates) => {
+                    for update in updates {
+                        if update.update_id >= offset {
+                            offset = update.update_id + 1;
+                        }
+                        handle_update(
+                            &state,
+                            &client,
+                            &settings.bot_token,
+                            &settings.chat_id,
+                            update,
+                        )
+                        .await;
+                    }
+                }
+                Err(e) => {
+                    tracing::debug!("Telegram bot polling tick error: {e:#}");
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                }
+            }
+        }
+    })
+}
+
+async fn handle_update(
+    state: &AppState,
+    client: &TelegramClient,
+    bot_token: &str,
+    configured_chat_id: &str,
+    update: TelegramUpdate,
+) {
+    let Some(msg) = update.message else { return };
+    let chat_id_str = msg.chat.id.to_string();
+
+    // Security boundary: Only respond to authorized chat ID
+    if chat_id_str != configured_chat_id {
+        tracing::warn!(
+            "Unauthorized Telegram interaction attempt from chat_id: {}",
+            chat_id_str
+        );
+        return;
+    }
+
+    let text = msg.text.as_deref().unwrap_or("").trim();
+    if text.is_empty() {
+        return;
+    }
+
+    let reply = match text.split_whitespace().next().unwrap_or("") {
+        "/start" | "/help" => build_help_message(),
+        "/status" => build_status_message(state).await,
+        "/tokens" => build_tokens_message(state).await,
+        "/usage" => build_usage_message(state).await,
+        "/ping" => "🏓 *Pong!* DeeperSeeker gateway is online and operational.".to_string(),
+        _ => format!(
+            "❓ Unknown command `{text}`.\n\n\
+             Available commands:\n\
+             • `/status` - Gateway & token pool health\n\
+             • `/tokens` - Detailed token list\n\
+             • `/usage` - Aggregated usage metrics\n\
+             • `/ping` - Health check"
+        ),
+    };
+
+    if let Err(e) = client
+        .send_message(bot_token, configured_chat_id, &reply)
+        .await
+    {
+        tracing::warn!("Failed sending Telegram reply: {e:#}");
+    }
+}
+
+fn build_help_message() -> String {
+    format!(
+        "🤖 *DeeperSeeker Gateway Bot*\n\n\
+         You can manage and monitor your DeepSeek token pool from here:\n\n\
+         • `/status` - Live pool health, in-flight streams & today's cache rate\n\
+         • `/tokens` - Detailed list of upstream tokens with status indicators\n\
+         • `/usage` - Aggregated token consumption analytics\n\
+         • `/ping` - Connectivity and heartbeat check\n\n\
+         _Version: v{}_",
+        env!("CARGO_PKG_VERSION")
+    )
+}
+
+async fn build_status_message(state: &AppState) -> String {
+    let tokens = get_tokens(&state.db).await.unwrap_or_default();
+    let total = tokens.len();
+    let active = tokens.iter().filter(|t| t.is_active()).count();
+    let limited = tokens.iter().filter(|t| t.is_rate_limited()).count();
+    let expired = tokens.iter().filter(|t| t.is_expired()).count();
+
+    let in_flight_map = state.in_flight.lock().await;
+    let in_flight: usize = in_flight_map.values().sum();
+
+    let summaries = get_all_summaries(&state.db).await.unwrap_or_default();
+    let today = summaries.iter().find(|s| s.period == "Today");
+
+    let (reqs, tokens_str, cache_rate) = match today {
+        Some(s) => (
+            format_metric(s.requests, false),
+            format_metric(s.total_tokens, false),
+            format!("{:.1}%", s.cache_hit_rate()),
+        ),
+        None => ("0".to_string(), "0".to_string(), "0.0%".to_string()),
+    };
+
+    format!(
+        "📊 *DeeperSeeker Gateway Status*\n\n\
+         • *Token Pool:* `{active} active / {total} total`\n\
+         • *In-Flight Streams:* `{in_flight}`\n\
+         • *Rate Limited:* `{limited}` | *Expired:* `{expired}`\n\
+         • *Today's Requests:* `{reqs}`\n\
+         • *Today's Tokens:* `{tokens_str}`\n\
+         • *Today's Cache Hit Rate:* `{cache_rate}`\n\
+         • *Gateway Port:* `:{}`\n\
+         • *Version:* `v{}`",
+        state.config.port,
+        env!("CARGO_PKG_VERSION")
+    )
+}
+
+fn format_time_ago(last_used: Option<f64>, now: f64) -> String {
+    let Some(t) = last_used.filter(|&v| v > 0.0) else {
+        return "never".to_string();
+    };
+    let s = (now - t).max(0.0) as u64;
+    if s < 60 {
+        format!("{s}s ago")
+    } else if s < 3600 {
+        format!("{}m ago", s / 60)
+    } else {
+        format!("{}h ago", s / 3600)
+    }
+}
+
+async fn build_tokens_message(state: &AppState) -> String {
+    let tokens = get_tokens(&state.db).await.unwrap_or_default();
+    if tokens.is_empty() {
+        return "⚠️ *Token Pool Empty*: No upstream tokens registered in the gateway.".to_string();
+    }
+
+    let usages = get_token_usages(&state.db).await.unwrap_or_default();
+    let usage_map: HashMap<i64, _> = usages.iter().map(|u| (u.token_id, u)).collect();
+    let now = now_timestamp();
+
+    let mut out = format!("🔑 *Upstream Token Pool ({})*\n\n", tokens.len());
+    for tok in tokens {
+        let dot = if tok.is_active() {
+            "🟢"
+        } else if tok.is_rate_limited() {
+            "🟡"
+        } else {
+            "🔴"
+        };
+
+        let alias = tok.alias.as_deref().unwrap_or("unnamed");
+        let masked = tok.masked_token();
+        let last_ago = format_time_ago(tok.last_used, now);
+
+        let usage_str = match usage_map.get(&tok.id) {
+            Some(u) => format!(
+                "reqs: {} | tot: {}",
+                u.requests,
+                format_metric(u.total_tokens, false)
+            ),
+            None => "reqs: 0 | tot: 0".to_string(),
+        };
+
+        out.push_str(&format!(
+            "{dot} *#{}* `{alias}` ({})\n  • `{masked}`\n  • Used: {last_ago} | {usage_str}\n\n",
+            tok.id, tok.status
+        ));
+    }
+
+    out
+}
+
+async fn build_usage_message(state: &AppState) -> String {
+    let summaries = get_all_summaries(&state.db).await.unwrap_or_default();
+    if summaries.is_empty() {
+        return "ℹ️ *No usage records yet.*".to_string();
+    }
+
+    let mut out = "📈 *Token Usage Analytics*\n\n".to_string();
+    for s in summaries {
+        out.push_str(&format!(
+            "• *{}*\n  Reqs: `{}` | In: `{}` | Out: `{}`\n  Total: `{}` | Cached: `{}` ({:.1}%)\n\n",
+            s.period,
+            format_metric(s.requests, false),
+            format_metric(s.prompt_tokens, false),
+            format_metric(s.completion_tokens, false),
+            format_metric(s.total_tokens, false),
+            format_metric(s.cached_tokens, false),
+            s.cache_hit_rate(),
+        ));
+    }
+    out
+}

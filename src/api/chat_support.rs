@@ -44,6 +44,18 @@ pub(crate) async fn handle_token_auth_failure(state: &AppState, tok_id: i64, msg
                 tok_id
             );
             let _ = mark_expired(&state.db, tok_id).await;
+            let active_count = crate::infra::db::get_tokens(&state.db)
+                .await
+                .map(|list| list.iter().filter(|t| t.is_active()).count())
+                .unwrap_or(0);
+            state.telegram.notify(
+                crate::domain::telegram::TelegramNotification::TokenExpired {
+                    id: tok_id,
+                    alias: tok.alias.clone(),
+                    reason: format!("{e:#}"),
+                    active_count,
+                },
+            );
         }
         Err(e) => {
             tracing::warn!(

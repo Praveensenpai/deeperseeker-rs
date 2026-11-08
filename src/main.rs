@@ -161,6 +161,9 @@ async fn run_server(args: ServeArgs) -> Result<()> {
     let live_log = Arc::new(deeperseeker::api::live_log::LiveLog::new());
     let metrics = Arc::new(deeperseeker::infra::metrics::Metrics::new());
     let tokenizer = deeperseeker::infra::tokenizer::Tokenizer::load();
+    let tg_settings = deeperseeker::infra::telegram_db::get_telegram_settings(&db).await?;
+    let telegram =
+        Arc::new(deeperseeker::infra::telegram_notifier::TelegramNotifier::new(tg_settings));
     let state = AppState {
         config: config.clone(),
         db,
@@ -172,8 +175,10 @@ async fn run_server(args: ServeArgs) -> Result<()> {
         live_log,
         metrics,
         tokenizer,
+        telegram,
     };
 
+    let _bot_poller = deeperseeker::infra::telegram_bot::start_telegram_bot_poller(state.clone());
     let router = build_router(state);
     let bind_addr = format!("{}:{}", config.host, config.port);
     let listener = TcpListener::bind(&bind_addr)

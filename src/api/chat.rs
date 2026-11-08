@@ -66,12 +66,30 @@ pub async fn chat_completions(
             }
             Err(AttemptError::Fatal(status, msg)) => {
                 state.metrics.record_error();
+                if status == StatusCode::SERVICE_UNAVAILABLE && msg.contains("No active tokens") {
+                    let total = crate::infra::db::get_tokens(&state.db)
+                        .await
+                        .map(|t| t.len())
+                        .unwrap_or(0);
+                    state
+                        .telegram
+                        .notify_no_valid_tokens("/v1/chat/completions", &req.model, total)
+                        .await;
+                }
                 return Err((status, Json(json!({"error": {"message": msg}}))));
             }
         }
     }
 
     state.metrics.record_rate_limited();
+    let total = crate::infra::db::get_tokens(&state.db)
+        .await
+        .map(|t| t.len())
+        .unwrap_or(0);
+    state
+        .telegram
+        .notify_no_valid_tokens("/v1/chat/completions", &req.model, total)
+        .await;
     let retry_after = state.config.cookie_cooldown;
     let body = Json(json!({
         "error": {

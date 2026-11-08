@@ -24,6 +24,7 @@ pub struct AppState {
     pub live_log: Arc<LiveLog>,
     pub metrics: Arc<crate::infra::metrics::Metrics>,
     pub tokenizer: Arc<Tokenizer>,
+    pub telegram: Arc<crate::infra::telegram_notifier::TelegramNotifier>,
 }
 
 /// RAII guard for one in-flight token counter entry. Dropping it releases the

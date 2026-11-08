@@ -15,7 +15,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
 
 ## 3. Module & Interface Skeleton
 
-### `src/api/admin.rs` (Role: api, Lines: 312)
+### `src/api/admin.rs` (Role: api, Lines: 325)
 - **Responsibility**: Core api logic in src/api/admin.rs
 - **Imports**: use crate :: api :: state :: AppState , use crate :: api :: token_admin :: verify_upstream , use crate :: domain :: token :: Token , use crate :: domain :: usage :: TokenUsage , use crate :: infra :: db :: { add_token as db_add_token , delete_token as db_delete_token , get_token as db_get_token , get_tokens , mark_active as db_mark_active , mark_expired as db_mark_expired , reset_token_usage as db_reset_token_usage , update_token as db_update_token , } , use crate :: infra :: usage_db :: get_token_usages , use axum :: { extract :: { Path , Request , State } , http :: { header :: AUTHORIZATION , StatusCode } , middleware :: Next , response :: { IntoResponse , Response } , Json , } , use serde :: { Deserialize , Serialize } , use serde_json :: json , use std :: collections :: HashMap 
 - **Types & Enums**:
@@ -47,8 +47,8 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn anthropic_messages (State (state) : State < AppState > , auth : Option < Extension < ClientAuth > > , Json (req) : Json < AnthropicMessageRequest > ,) -> Result < Response , (StatusCode , Json < serde_json :: Value >) >
   ```
 
-### `src/api/chat.rs` (Role: api, Lines: 403)
-- **Responsibility**: Chat completion entry; acquires the token in-flight guard, threads it into streaming/unary handlers, and classifies `AttemptError::TooLong` as a 400 `context_length_exceeded` without touching the pool
+### `src/api/chat.rs` (Role: api, Lines: 421)
+- **Responsibility**: Core api logic in src/api/chat.rs
 - **Imports**: use crate :: api :: chat_stream :: handle_streaming_response , use crate :: api :: chat_support :: { handle_token_auth_failure , pace_token_request } , use crate :: api :: chat_unary :: handle_unary_response , use crate :: api :: middleware :: ClientAuth , use crate :: api :: state :: AppState , use crate :: domain :: openai :: ChatCompletionRequest , use crate :: domain :: session :: compute_signature , use crate :: domain :: token :: Token , use crate :: domain :: upstream :: is_auth_failure , use crate :: infra :: db :: { mark_active , mark_limited , pick_token , touch_token } , use crate :: infra :: deepseek_client :: CompletionArgs , use crate :: infra :: media :: { resolve_message_media , MediaContext } , use crate :: infra :: prompt :: build_prompt_for_turn , use crate :: infra :: session_db :: find_session , use axum :: { extract :: { Extension , State } , http :: StatusCode , response :: Response , Json , } , use serde_json :: json 
 - **Public Functions & Signatures**:
   ```rust
@@ -74,7 +74,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   ```
 
 ### `src/api/chat_stream.rs` (Role: api, Lines: 496)
-- **Responsibility**: Streaming SSE handler; peeks upstream for a context overflow before committing the response (returns HTTP 400 so clients can auto-compact), holds the token in-flight guard for the stream's lifetime, and retries empty streams without retiring tokens
+- **Responsibility**: Core api logic in src/api/chat_stream.rs
 - **Imports**: use crate :: api :: chat_chunks :: { build_terminal_chunk , create_openai_chunks , current_timestamp , make_reasoning_chunk , make_text_chunk , make_tool_calls_chunk , } , use crate :: api :: live_log :: { render_input , LogFinish , LogHandle , LogSeed } , use crate :: api :: state :: AppState , use crate :: domain :: openai :: ChatMessage , use crate :: domain :: session :: { compute_next_signature , next_parent_id , Session } , use crate :: infra :: dsml :: { find_dsml_block_start , parse_dsml , safe_unambiguous_len , ParsedDsml } , use crate :: infra :: session_db :: save_session , pub use crate :: infra :: sse :: { drain_sse_lines , extract_chunks_from_event , parse_sse_line , ExtractedChunk , SseLineResult , } , use crate :: infra :: tokenizer :: { count_message_tokens , Tokenizer } , use crate :: infra :: usage_db :: record_usage_attributed , use axum :: { body :: Body , http :: { header :: CONTENT_TYPE , StatusCode } , response :: Response , } , use bytes :: Bytes , use futures :: { stream , StreamExt } , use std :: pin :: Pin , use uuid :: Uuid 
 - **Types & Enums**:
   ```rust
@@ -83,15 +83,14 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
 - **Public Functions & Signatures**:
   ```rust
   async fn handle_streaming_response (state : & AppState , args : StreamArgs ,) -> Result < Response , (StatusCode , String) >
-  async fn peek_upstream < S > (stream : & mut S) -> (Vec < Bytes > , Option < String >)
   ```
 
-### `src/api/chat_support.rs` (Role: api, Lines: 56)
+### `src/api/chat_support.rs` (Role: api, Lines: 68)
 - **Responsibility**: Core api logic in src/api/chat_support.rs
 - **Imports**: use crate :: api :: state :: AppState , use crate :: domain :: upstream :: is_auth_failure , use crate :: infra :: db :: { mark_expired , mark_limited } 
 
 ### `src/api/chat_unary.rs` (Role: api, Lines: 182)
-- **Responsibility**: Unary chat completion; captures the upstream error message from the SSE body so context-overflow rejections can be classified instead of surfacing as a generic 429
+- **Responsibility**: Core api logic in src/api/chat_unary.rs
 - **Imports**: use crate :: api :: chat_chunks :: { build_chat_response , ChatResponseArgs } , use crate :: api :: chat_stream :: { compute_cached_tokens , save_stream_session } , use crate :: api :: live_log :: { render_input , LogFinish , LogSeed } , use crate :: api :: state :: AppState , use crate :: domain :: openai :: ChatMessage , use crate :: infra :: dsml :: parse_dsml , pub use crate :: infra :: sse :: { drain_sse_lines , parse_sse_line , SseLineResult } , use crate :: infra :: tokenizer :: count_message_tokens , use crate :: infra :: usage_db :: record_usage_attributed , use axum :: http :: StatusCode , use axum :: response :: { IntoResponse , Response } , use axum :: Json , use futures :: StreamExt 
 - **Types & Enums**:
   ```rust
@@ -116,7 +115,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn delete_client_key (State (state) : State < AppState > , headers : HeaderMap , Path (id) : Path < i64 > ,) -> Response
   ```
 
-### `src/api/dashboard.rs` (Role: api, Lines: 337)
+### `src/api/dashboard.rs` (Role: api, Lines: 342)
 - **Responsibility**: Core api logic in src/api/dashboard.rs
 - **Imports**: use crate :: api :: state :: AppState , use crate :: domain :: client_key :: ClientKey , use crate :: domain :: token :: Token , use crate :: domain :: usage :: { format_metric , TokenUsage } , use crate :: infra :: client_keys :: { list_client_keys , window_usage_tokens } , use crate :: infra :: db :: { get_tokens , now_timestamp } , use axum :: { extract :: { Form , Query , State } , http :: { header :: { COOKIE , SET_COOKIE } , HeaderMap , StatusCode , } , response :: { Html , IntoResponse , Redirect , Response } , } , use serde :: { Deserialize , Serialize } , use sha2 :: { Digest , Sha256 } , use std :: collections :: HashMap , use tera :: Context 
 - **Types & Enums**:
@@ -198,7 +197,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   ```
 
 ### `src/api/middleware.rs` (Role: api, Lines: 137)
-- **Responsibility**: Bearer auth + client-key quota enforcement; serializes quota-limited keys behind a per-key admission gate held for the response body's lifetime
+- **Responsibility**: Core api logic in src/api/middleware.rs
 - **Imports**: use crate :: api :: state :: AppState , use crate :: infra :: client_keys :: { find_active_by_plaintext , touch_client_key , window_usage_tokens } , use axum :: { body :: Body , extract :: { Request , State } , http :: { header :: AUTHORIZATION , header :: CONTENT_TYPE , header :: RETRY_AFTER , StatusCode } , middleware :: Next , response :: { IntoResponse , Response } , Json , } , use futures :: StreamExt , use serde_json :: json , use tokio :: sync :: OwnedSemaphorePermit 
 - **Types & Enums**:
   ```rust
@@ -207,7 +206,6 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
 - **Public Functions & Signatures**:
   ```rust
   async fn require_api_key (State (state) : State < AppState > , mut req : Request , next : Next ,) -> Response
-  fn hold_permit_until_body_done (response : Response , permit : OwnedSemaphorePermit) -> Response
   ```
 
 ### `src/api/models.rs` (Role: api, Lines: 31)
@@ -218,8 +216,8 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn list_models () -> impl IntoResponse
   ```
 
-### `src/api/state.rs` (Role: api, Lines: 144)
-- **Responsibility**: Shared app state; RAII in-flight counters and per-client quota admission gates
+### `src/api/state.rs` (Role: api, Lines: 145)
+- **Responsibility**: Core api logic in src/api/state.rs
 - **Imports**: use crate :: api :: live_log :: LiveLog , use crate :: config :: AppConfig , use crate :: infra :: deepseek_client :: DeepSeekClient , use crate :: infra :: pow :: PowSolver , use crate :: infra :: tokenizer :: Tokenizer , use std :: collections :: HashMap , use std :: sync :: Arc , use tera :: Tera , use tokio :: sync :: { Mutex , OwnedSemaphorePermit , Semaphore } , use tokio_rusqlite :: Connection 
 - **Types & Enums**:
   ```rust
@@ -229,11 +227,24 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
 - **Public Functions & Signatures**:
   ```rust
   async fn begin_token_request (& self , token_id : i64) -> CounterGuard
-  async fn acquire_client_gate (& self , key_id : i64) -> Option < OwnedSemaphorePermit >
   async fn get_in_flight_snapshot (& self) -> HashMap < i64 , usize >
+  async fn acquire_client_gate (& self , key_id : i64) -> Option < OwnedSemaphorePermit >
   ```
 
-### `src/api/token_admin.rs` (Role: api, Lines: 151)
+### `src/api/telegram_admin.rs` (Role: api, Lines: 103)
+- **Responsibility**: Core api logic in src/api/telegram_admin.rs
+- **Imports**: use crate :: api :: dashboard :: { is_authenticated , redirect_msg } , use crate :: api :: state :: AppState , use crate :: domain :: telegram :: TelegramSettings , use crate :: infra :: db :: now_timestamp , use crate :: infra :: telegram_client :: TelegramClient , use crate :: infra :: telegram_db :: save_telegram_settings , use axum :: { extract :: { Form , State } , http :: HeaderMap , response :: { IntoResponse , Redirect , Response } , } , use serde :: Deserialize 
+- **Types & Enums**:
+  ```rust
+  pub struct TelegramSettingsForm
+  ```
+- **Public Functions & Signatures**:
+  ```rust
+  async fn update_telegram_settings (State (state) : State < AppState > , headers : HeaderMap , Form (form) : Form < TelegramSettingsForm > ,) -> Response
+  async fn test_telegram_notification (State (state) : State < AppState > , headers : HeaderMap ,) -> Response
+  ```
+
+### `src/api/token_admin.rs` (Role: api, Lines: 177)
 - **Responsibility**: Core api logic in src/api/token_admin.rs
 - **Imports**: use crate :: api :: dashboard :: { is_authenticated , redirect_msg } , use crate :: api :: state :: AppState , use crate :: infra :: db :: { add_token as db_add_token , delete_token as db_delete_token , get_token as db_get_token , mark_active as db_mark_active , mark_expired as db_mark_expired , update_token as db_update_token , } , use axum :: { extract :: { Form , Path , State } , http :: HeaderMap , response :: { IntoResponse , Redirect , Response } , } , use serde :: Deserialize 
 - **Types & Enums**:
@@ -261,9 +272,9 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn get_usage_metrics (State (state) : State < AppState > , Query (query) : Query < UsageQuery > ,) -> impl IntoResponse
   ```
 
-### `src/api.rs` (Role: api, Lines: 109)
-- **Responsibility**: Router assembly; API routes carry a 64 MB DefaultBodyLimit for long-context prompts
-- **Imports**: use crate :: api :: admin :: { add_token as admin_add_token , delete_token as admin_delete_token , get_pool , get_token as admin_get_token , list_tokens as admin_list_tokens , require_admin_key , reset_token as admin_reset_token , set_status as admin_set_status , update_token as admin_update_token , verify_token as admin_verify_token , } , use crate :: api :: anthropic :: anthropic_messages , use crate :: api :: chat :: chat_completions , use crate :: api :: client_key_admin :: { add_client_key , delete_client_key , revoke_client_key } , use crate :: api :: dashboard :: { logout , show_dashboard , show_login , submit_login } , use crate :: api :: files :: { upload_file_anthropic , upload_file_openai } , use crate :: api :: health :: { health , root } , use crate :: api :: logs :: { get_logs , stream_logs } , use crate :: api :: metrics :: get_metrics , use crate :: api :: middleware :: require_api_key , use crate :: api :: models :: list_models , use crate :: api :: state :: AppState , use crate :: api :: token_admin :: { add_token , delete_token , edit_token , verify_token } , use crate :: api :: usage :: get_usage_metrics , use axum :: { middleware :: from_fn_with_state , routing :: { get , post } , Router , } , use tower_http :: cors :: CorsLayer , use tower_http :: services :: ServeDir 
+### `src/api.rs` (Role: api, Lines: 113)
+- **Responsibility**: Core api logic in src/api.rs
+- **Imports**: use crate :: api :: admin :: { add_token as admin_add_token , delete_token as admin_delete_token , get_pool , get_token as admin_get_token , list_tokens as admin_list_tokens , require_admin_key , reset_token as admin_reset_token , set_status as admin_set_status , update_token as admin_update_token , verify_token as admin_verify_token , } , use crate :: api :: anthropic :: anthropic_messages , use crate :: api :: chat :: chat_completions , use crate :: api :: client_key_admin :: { add_client_key , delete_client_key , revoke_client_key } , use crate :: api :: dashboard :: { logout , show_dashboard , show_login , submit_login } , use crate :: api :: files :: { upload_file_anthropic , upload_file_openai } , use crate :: api :: health :: { health , root } , use crate :: api :: logs :: { get_logs , stream_logs } , use crate :: api :: metrics :: get_metrics , use crate :: api :: middleware :: require_api_key , use crate :: api :: models :: list_models , use crate :: api :: state :: AppState , use crate :: api :: telegram_admin :: { test_telegram_notification , update_telegram_settings } , use crate :: api :: token_admin :: { add_token , delete_token , edit_token , verify_token } , use crate :: api :: usage :: get_usage_metrics , use axum :: { extract :: DefaultBodyLimit , middleware :: from_fn_with_state , routing :: { get , post } , Router , } , use tower_http :: cors :: CorsLayer , use tower_http :: services :: ServeDir 
 - **Public Functions & Signatures**:
   ```rust
   fn build_router (state : AppState) -> Router
@@ -431,6 +442,21 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn compute_next_signature (messages : & [ChatMessage] , model : & str , assistant_content : & str , tool_calls : Option < & [ToolCall] > ,) -> String
   ```
 
+### `src/domain/telegram.rs` (Role: domain, Lines: 115)
+- **Responsibility**: Core domain logic in src/domain/telegram.rs
+- **Imports**: use serde :: { Deserialize , Serialize } 
+- **Types & Enums**:
+  ```rust
+  pub struct TelegramSettings
+  pub enum TelegramNotification
+  ```
+- **Public Functions & Signatures**:
+  ```rust
+  fn is_configured (& self) -> bool
+  fn masked_token (& self) -> String
+  fn format_markdown (& self) -> String
+  ```
+
 ### `src/domain/token.rs` (Role: domain, Lines: 47)
 - **Responsibility**: Core domain logic in src/domain/token.rs
 - **Imports**: use serde :: { Deserialize , Serialize } 
@@ -449,7 +475,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   ```
 
 ### `src/domain/upstream.rs` (Role: domain, Lines: 159)
-- **Responsibility**: Upstream response types and error classification (`is_auth_failure`, `is_context_overflow`/`is_context_overflow_msg`)
+- **Responsibility**: Core domain logic in src/domain/upstream.rs
 - **Imports**: use serde :: { Deserialize , Serialize } 
 - **Types & Enums**:
   ```rust
@@ -490,7 +516,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn format_metric (val : u64 , raw : bool) -> String
   ```
 
-### `src/domain.rs` (Role: domain, Lines: 7)
+### `src/domain.rs` (Role: domain, Lines: 8)
 - **Responsibility**: Core domain logic in src/domain.rs
 
 ### `src/infra/assets.rs` (Role: infra, Lines: 85)
@@ -521,8 +547,8 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn window_usage_tokens (conn : & Connection , client_key_id : i64 , window_secs : u64 ,) -> Result < u64 >
   ```
 
-### `src/infra/db.rs` (Role: infra, Lines: 377)
-- **Responsibility**: Token pool persistence and scheduling; schema/init maintains the `(client_key_id, timestamp)` usage index
+### `src/infra/db.rs` (Role: infra, Lines: 384)
+- **Responsibility**: Core infra logic in src/infra/db.rs
 - **Imports**: use crate :: domain :: token :: Token , use anyhow :: { Context , Result } , use rusqlite :: params , use std :: collections :: HashMap , use std :: time :: { SystemTime , UNIX_EPOCH } , use tokio_rusqlite :: Connection 
 - **Public Functions & Signatures**:
   ```rust
@@ -688,6 +714,58 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn extract_chunks_from_event (val : & serde_json :: Value , think_open : & mut bool ,) -> Vec < ExtractedChunk >
   ```
 
+### `src/infra/telegram_bot.rs` (Role: infra, Lines: 220)
+- **Responsibility**: Core infra logic in src/infra/telegram_bot.rs
+- **Imports**: use crate :: api :: state :: AppState , use crate :: domain :: usage :: format_metric , use crate :: infra :: db :: { get_tokens , now_timestamp } , use crate :: infra :: telegram_client :: { TelegramClient , TelegramUpdate } , use crate :: infra :: usage_db :: { get_all_summaries , get_token_usages } , use std :: collections :: HashMap , use std :: time :: Duration 
+- **Public Functions & Signatures**:
+  ```rust
+  fn start_telegram_bot_poller (state : AppState) -> tokio :: task :: JoinHandle < () >
+  ```
+
+### `src/infra/telegram_client.rs` (Role: infra, Lines: 153)
+- **Responsibility**: Core infra logic in src/infra/telegram_client.rs
+- **Imports**: use anyhow :: { bail , Context , Result } , use reqwest :: Client , use serde :: { Deserialize , Serialize } , use std :: time :: Duration 
+- **Types & Enums**:
+  ```rust
+  pub struct TelegramClient
+  pub struct TelegramApiResponse
+  pub struct TelegramResponseParameters
+  pub struct TelegramUpdate
+  pub struct TelegramIncomingMessage
+  pub struct TelegramChat
+  ```
+- **Public Functions & Signatures**:
+  ```rust
+  fn new () -> Self
+  async fn send_message (& self , bot_token : & str , chat_id : & str , text : & str) -> Result < () >
+  async fn get_updates (& self , bot_token : & str , offset : i64 , timeout_secs : u64 ,) -> Result < Vec < TelegramUpdate > >
+  ```
+
+### `src/infra/telegram_db.rs` (Role: infra, Lines: 70)
+- **Responsibility**: Core infra logic in src/infra/telegram_db.rs
+- **Imports**: use crate :: domain :: telegram :: TelegramSettings , use crate :: infra :: db :: now_timestamp , use anyhow :: { Context , Result } , use rusqlite :: params , use tokio_rusqlite :: Connection 
+- **Public Functions & Signatures**:
+  ```rust
+  async fn get_telegram_settings (conn : & Connection) -> Result < TelegramSettings >
+  async fn save_telegram_settings (conn : & Connection , settings : & TelegramSettings) -> Result < () >
+  ```
+
+### `src/infra/telegram_notifier.rs` (Role: infra, Lines: 116)
+- **Responsibility**: Core infra logic in src/infra/telegram_notifier.rs
+- **Imports**: use crate :: domain :: telegram :: { TelegramNotification , TelegramSettings } , use crate :: infra :: telegram_client :: TelegramClient , use std :: sync :: atomic :: { AtomicUsize , Ordering } , use std :: sync :: Arc , use std :: time :: { Duration , Instant } , use tokio :: sync :: { mpsc , RwLock } 
+- **Types & Enums**:
+  ```rust
+  pub struct TelegramNotifier
+  ```
+- **Public Functions & Signatures**:
+  ```rust
+  fn new (settings : TelegramSettings) -> Self
+  async fn update_settings (& self , new_settings : TelegramSettings)
+  async fn current_settings (& self) -> TelegramSettings
+  fn notify (& self , notification : TelegramNotification)
+  async fn notify_no_valid_tokens (& self , endpoint : & str , model : & str , total : usize)
+  ```
+
 ### `src/infra/tokenizer.rs` (Role: infra, Lines: 89)
 - **Responsibility**: Core infra logic in src/infra/tokenizer.rs
 - **Imports**: use crate :: domain :: openai :: ChatMessage , use crate :: infra :: assets :: resolve_asset_dir , use std :: sync :: Arc , use tokenizers :: Tokenizer as HfTokenizer 
@@ -705,7 +783,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   ```
 
 ### `src/infra/usage_db.rs` (Role: infra, Lines: 283)
-- **Responsibility**: Usage recording and aggregation; maintains the `(client_key_id, timestamp)` composite index for rolling-window quota sums
+- **Responsibility**: Core infra logic in src/infra/usage_db.rs
 - **Imports**: use crate :: domain :: usage :: { DailyUsage , ModelUsage , TokenUsage , UsageFilter , UsageSummary } , use anyhow :: { Context , Result } , use rusqlite :: params , use tokio_rusqlite :: Connection 
 - **Public Functions & Signatures**:
   ```rust
@@ -732,14 +810,14 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn start_suspended_token_probe (conn : Connection , client : DeepSeekClient , interval : Duration ,) -> tokio :: task :: JoinHandle < () >
   ```
 
-### `src/infra.rs` (Role: infra, Lines: 17)
+### `src/infra.rs` (Role: infra, Lines: 21)
 - **Responsibility**: Core infra logic in src/infra.rs
 
 ### `src/lib.rs` (Role: general, Lines: 6)
 - **Responsibility**: Core general logic in src/lib.rs
 
-### `src/main.rs` (Role: general, Lines: 222)
-- **Responsibility**: CLI dispatch and server bootstrap; initializes in-flight counters and per-client quota gates
+### `src/main.rs` (Role: general, Lines: 227)
+- **Responsibility**: Core general logic in src/main.rs
 - **Imports**: use anyhow :: { Context , Result } , use clap :: Parser , use deeperseeker :: api :: build_router , use deeperseeker :: api :: state :: AppState , use deeperseeker :: cli :: diagnostic :: run_diagnostics , use deeperseeker :: cli :: service :: { install_user_service , service_status , uninstall_user_service } , use deeperseeker :: cli :: token_cmd :: { add_token , edit_token , list_tokens , remove_token , reset_token_usage , test_tokens , } , use deeperseeker :: cli :: usage_cmd :: display_usage , use deeperseeker :: cli :: { Cli , Commands , ServeArgs , ServiceArgs , ServiceSubcommands , TokenArgs , TokenSubcommands , UpdateArgs , } , use deeperseeker :: config :: AppConfig , use deeperseeker :: infra :: db :: { init_db , open_db } , use deeperseeker :: infra :: deepseek_client :: DeepSeekClient , use deeperseeker :: infra :: pow :: PowSolver , use deeperseeker :: tui :: run_status , use std :: collections :: HashMap , use std :: sync :: Arc , use tera :: Tera , use tokio :: net :: TcpListener , use tokio :: sync :: Mutex , use tracing :: info 
 
 ### `src/tui/tabs.rs` (Role: tui, Lines: 343)

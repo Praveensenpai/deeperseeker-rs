@@ -15,6 +15,7 @@ pub mod metrics;
 pub mod middleware;
 pub mod models;
 pub mod state;
+pub mod telegram_admin;
 pub mod token_admin;
 pub mod usage;
 
@@ -35,6 +36,7 @@ use crate::api::metrics::get_metrics;
 use crate::api::middleware::require_api_key;
 use crate::api::models::list_models;
 use crate::api::state::AppState;
+use crate::api::telegram_admin::{test_telegram_notification, update_telegram_settings};
 use crate::api::token_admin::{add_token, delete_token, edit_token, verify_token};
 use crate::api::usage::get_usage_metrics;
 use axum::{
@@ -94,7 +96,9 @@ pub fn build_router(state: AppState) -> Router {
         .route("/tokens/{token_id}/delete", post(delete_token))
         .route("/client-keys/add", post(add_client_key))
         .route("/client-keys/{id}/revoke", post(revoke_client_key))
-        .route("/client-keys/{id}/delete", post(delete_client_key));
+        .route("/client-keys/{id}/delete", post(delete_client_key))
+        .route("/telegram/settings", post(update_telegram_settings))
+        .route("/telegram/test", post(test_telegram_notification));
 
     Router::new()
         .merge(api_routes)

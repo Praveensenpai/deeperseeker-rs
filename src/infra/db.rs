@@ -79,6 +79,13 @@ pub async fn init_db(conn: &Connection) -> Result<()> {
                 key TEXT PRIMARY KEY,
                 value INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS telegram_settings (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                bot_token TEXT NOT NULL DEFAULT '',
+                chat_id TEXT NOT NULL DEFAULT '',
+                enabled INTEGER NOT NULL DEFAULT 0,
+                updated_at REAL NOT NULL DEFAULT 0
+            );
             CREATE INDEX IF NOT EXISTS idx_usage_date ON request_usage(date);
             CREATE INDEX IF NOT EXISTS idx_usage_ts ON request_usage(timestamp);",
         )?;
