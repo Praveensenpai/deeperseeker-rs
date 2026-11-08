@@ -714,7 +714,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn extract_chunks_from_event (val : & serde_json :: Value , think_open : & mut bool ,) -> Vec < ExtractedChunk >
   ```
 
-### `src/infra/telegram_bot.rs` (Role: infra, Lines: 220)
+### `src/infra/telegram_bot.rs` (Role: infra, Lines: 309)
 - **Responsibility**: Core infra logic in src/infra/telegram_bot.rs
 - **Imports**: use crate :: api :: state :: AppState , use crate :: domain :: usage :: format_metric , use crate :: infra :: db :: { get_tokens , now_timestamp } , use crate :: infra :: telegram_client :: { TelegramClient , TelegramUpdate } , use crate :: infra :: usage_db :: { get_all_summaries , get_token_usages } , use std :: collections :: HashMap , use std :: time :: Duration 
 - **Public Functions & Signatures**:

@@ -67,15 +67,24 @@ async fn handle_update(
         return;
     }
 
-    let reply = match text.split_whitespace().next().unwrap_or("") {
+    let (cmd, args) = match text.split_once(char::is_whitespace) {
+        Some((c, a)) => (c.trim(), a.trim()),
+        None => (text.trim(), ""),
+    };
+
+    let reply = match cmd {
         "/start" | "/help" => build_help_message(),
         "/status" => build_status_message(state).await,
         "/tokens" => build_tokens_message(state).await,
         "/usage" => build_usage_message(state).await,
         "/ping" => "🏓 *Pong!* DeeperSeeker gateway is online and operational.".to_string(),
+        "/add" => handle_add_token_command(state, args).await,
+        "/del" | "/remove" => handle_del_token_command(state, args).await,
         _ => format!(
-            "❓ Unknown command `{text}`.\n\n\
+            "❓ Unknown command `{cmd}`.\n\n\
              Available commands:\n\
+             • `/add <token> [alias]` - Add verified upstream token\n\
+             • `/del <id>` - Remove token from pool\n\
              • `/status` - Gateway & token pool health\n\
              • `/tokens` - Detailed token list\n\
              • `/usage` - Aggregated usage metrics\n\
@@ -94,13 +103,93 @@ async fn handle_update(
 fn build_help_message() -> String {
     format!(
         "🤖 *DeeperSeeker Gateway Bot*\n\n\
-         You can manage and monitor your DeepSeek token pool from here:\n\n\
+         You can manage and monitor your DeepSeek token pool directly from Telegram:\n\n\
+         • `/add <token> [alias]` - Verify & add a new DeepSeek auth token\n\
+         • `/del <id>` - Remove a token from the pool by ID\n\
          • `/status` - Live pool health, in-flight streams & today's cache rate\n\
          • `/tokens` - Detailed list of upstream tokens with status indicators\n\
          • `/usage` - Aggregated token consumption analytics\n\
          • `/ping` - Connectivity and heartbeat check\n\n\
          _Version: v{}_",
         env!("CARGO_PKG_VERSION")
+    )
+}
+
+async fn handle_add_token_command(state: &AppState, args: &str) -> String {
+    let mut parts = args.split_whitespace();
+    let Some(raw_token) = parts.next() else {
+        return "⚠️ *Usage:* `/add <TOKEN> [ALIAS]`\n\nExample:\n`/add eyJhbGci... personal`"
+            .to_string();
+    };
+
+    let token = raw_token.trim().trim_matches('"').trim_matches('\'');
+    if token.is_empty() {
+        return "⚠️ Token cannot be empty.".to_string();
+    }
+
+    let alias = parts.next().map(|s| s.trim().to_string());
+
+    if !crate::api::token_admin::verify_upstream(state, token).await {
+        return "❌ *Upstream Verification Failed*\n\nDeepSeek rejected this token. It was not added to the pool.".to_string();
+    }
+
+    if let Err(e) = crate::infra::db::add_token(&state.db, token, alias.as_deref()).await {
+        return format!("❌ Failed to save token to database: {e:#}");
+    }
+
+    let tokens = get_tokens(&state.db).await.unwrap_or_default();
+    let total_count = tokens.len();
+    let active_count = tokens.iter().filter(|t| t.is_active()).count();
+    let added = tokens.into_iter().rfind(|t| t.token == token);
+
+    match added {
+        Some(tok) => {
+            let name = tok.alias.as_deref().unwrap_or("unnamed");
+            let masked = tok.masked_token();
+            format!(
+                "✅ *Token Added & Verified Successfully*\n\n\
+                 • *ID:* `#{}`\n\
+                 • *Alias:* `{name}`\n\
+                 • *Status:* `ACTIVE`\n\
+                 • *Key:* `{masked}`\n\
+                 • *Pool Health:* `{active_count} active / {total_count} total`",
+                tok.id
+            )
+        }
+        None => format!("✅ Token added. Current pool size: {total_count}"),
+    }
+}
+
+async fn handle_del_token_command(state: &AppState, args: &str) -> String {
+    let Some(id_str) = args.split_whitespace().next() else {
+        return "⚠️ *Usage:* `/del <TOKEN_ID>`\n\nExample:\n`/del 2`".to_string();
+    };
+
+    let Ok(id) = id_str.trim_start_matches('#').parse::<i64>() else {
+        return format!("⚠️ Invalid token ID `{id_str}`. Must be an integer (e.g. `/del 2`).");
+    };
+
+    let existing = crate::infra::db::get_token(&state.db, id)
+        .await
+        .unwrap_or(None);
+    let Some(tok) = existing else {
+        return format!("⚠️ Token `#{id}` not found in pool.");
+    };
+
+    if let Err(e) = crate::infra::db::delete_token(&state.db, id).await {
+        return format!("❌ Failed to delete token `#{id}`: {e:#}");
+    }
+
+    let tokens = get_tokens(&state.db).await.unwrap_or_default();
+    let active_count = tokens.iter().filter(|t| t.is_active()).count();
+    let name = tok.alias.as_deref().unwrap_or("unnamed");
+
+    format!(
+        "🗑️ *Token #{} Deleted*\n\n\
+         Removed `{name}` from pool.\n\
+         Pool now has `{active_count} active / {} total`.",
+        id,
+        tokens.len()
     )
 }
 

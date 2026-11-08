@@ -107,3 +107,22 @@ async fn test_telegram_notifier_rate_limiting_empty_hits() {
     let current = notifier.current_settings().await;
     assert_eq!(current.chat_id, "123");
 }
+
+#[test]
+fn test_telegram_command_parsing() {
+    let input = "/add eyJhbGciOiJIUzI1NiJ9 work";
+    let (cmd, args) = match input.split_once(char::is_whitespace) {
+        Some((c, a)) => (c.trim(), a.trim()),
+        None => (input.trim(), ""),
+    };
+    assert_eq!(cmd, "/add");
+    assert_eq!(args, "eyJhbGciOiJIUzI1NiJ9 work");
+
+    let del_input = "/del 3";
+    let (cmd2, args2) = match del_input.split_once(char::is_whitespace) {
+        Some((c, a)) => (c.trim(), a.trim()),
+        None => (del_input.trim(), ""),
+    };
+    assert_eq!(cmd2, "/del");
+    assert_eq!(args2, "3");
+}
