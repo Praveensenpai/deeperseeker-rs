@@ -150,4 +150,33 @@ impl TelegramClient {
 
         Ok(api_res.result.unwrap_or_default())
     }
+
+    pub async fn set_my_commands(
+        &self,
+        bot_token: &str,
+        commands: &[crate::domain::telegram::TelegramBotCommand],
+    ) -> Result<()> {
+        let url = format!("https://api.telegram.org/bot{bot_token}/setMyCommands");
+        let resp = self
+            .client
+            .post(&url)
+            .json(&serde_json::json!({ "commands": commands }))
+            .send()
+            .await
+            .context("Failed calling Telegram setMyCommands")?;
+
+        let api_res: TelegramApiResponse<bool> = resp
+            .json()
+            .await
+            .context("Failed parsing setMyCommands response")?;
+
+        if !api_res.ok {
+            let desc = api_res
+                .description
+                .unwrap_or_else(|| "Unknown error".to_string());
+            bail!("Telegram setMyCommands error: {desc}");
+        }
+
+        Ok(())
+    }
 }

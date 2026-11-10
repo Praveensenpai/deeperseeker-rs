@@ -231,7 +231,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn acquire_client_gate (& self , key_id : i64) -> Option < OwnedSemaphorePermit >
   ```
 
-### `src/api/telegram_admin.rs` (Role: api, Lines: 103)
+### `src/api/telegram_admin.rs` (Role: api, Lines: 114)
 - **Responsibility**: Core api logic in src/api/telegram_admin.rs
 - **Imports**: use crate :: api :: dashboard :: { is_authenticated , redirect_msg } , use crate :: api :: state :: AppState , use crate :: domain :: telegram :: TelegramSettings , use crate :: infra :: db :: now_timestamp , use crate :: infra :: telegram_client :: TelegramClient , use crate :: infra :: telegram_db :: save_telegram_settings , use axum :: { extract :: { Form , State } , http :: HeaderMap , response :: { IntoResponse , Redirect , Response } , } , use serde :: Deserialize 
 - **Types & Enums**:
@@ -442,19 +442,21 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn compute_next_signature (messages : & [ChatMessage] , model : & str , assistant_content : & str , tool_calls : Option < & [ToolCall] > ,) -> String
   ```
 
-### `src/domain/telegram.rs` (Role: domain, Lines: 115)
+### `src/domain/telegram.rs` (Role: domain, Lines: 158)
 - **Responsibility**: Core domain logic in src/domain/telegram.rs
 - **Imports**: use serde :: { Deserialize , Serialize } 
 - **Types & Enums**:
   ```rust
   pub struct TelegramSettings
   pub enum TelegramNotification
+  pub struct TelegramBotCommand
   ```
 - **Public Functions & Signatures**:
   ```rust
   fn is_configured (& self) -> bool
   fn masked_token (& self) -> String
   fn format_markdown (& self) -> String
+  fn default_bot_commands () -> & 'static [TelegramBotCommand]
   ```
 
 ### `src/domain/token.rs` (Role: domain, Lines: 47)
@@ -714,7 +716,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn extract_chunks_from_event (val : & serde_json :: Value , think_open : & mut bool ,) -> Vec < ExtractedChunk >
   ```
 
-### `src/infra/telegram_bot.rs` (Role: infra, Lines: 309)
+### `src/infra/telegram_bot.rs` (Role: infra, Lines: 336)
 - **Responsibility**: Core infra logic in src/infra/telegram_bot.rs
 - **Imports**: use crate :: api :: state :: AppState , use crate :: domain :: usage :: format_metric , use crate :: infra :: db :: { get_tokens , now_timestamp } , use crate :: infra :: telegram_client :: { TelegramClient , TelegramUpdate } , use crate :: infra :: usage_db :: { get_all_summaries , get_token_usages } , use std :: collections :: HashMap , use std :: time :: Duration 
 - **Public Functions & Signatures**:
@@ -722,7 +724,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn start_telegram_bot_poller (state : AppState) -> tokio :: task :: JoinHandle < () >
   ```
 
-### `src/infra/telegram_client.rs` (Role: infra, Lines: 153)
+### `src/infra/telegram_client.rs` (Role: infra, Lines: 182)
 - **Responsibility**: Core infra logic in src/infra/telegram_client.rs
 - **Imports**: use anyhow :: { bail , Context , Result } , use reqwest :: Client , use serde :: { Deserialize , Serialize } , use std :: time :: Duration 
 - **Types & Enums**:
@@ -739,6 +741,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn new () -> Self
   async fn send_message (& self , bot_token : & str , chat_id : & str , text : & str) -> Result < () >
   async fn get_updates (& self , bot_token : & str , offset : i64 , timeout_secs : u64 ,) -> Result < Vec < TelegramUpdate > >
+  async fn set_my_commands (& self , bot_token : & str , commands : & [crate :: domain :: telegram :: TelegramBotCommand] ,) -> Result < () >
   ```
 
 ### `src/infra/telegram_db.rs` (Role: infra, Lines: 70)

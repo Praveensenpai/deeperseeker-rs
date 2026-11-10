@@ -126,3 +126,40 @@ fn test_telegram_command_parsing() {
     assert_eq!(cmd2, "/del");
     assert_eq!(args2, "3");
 }
+
+#[test]
+fn test_default_bot_commands_validity() {
+    use deeperseeker::domain::telegram::default_bot_commands;
+    use std::collections::HashSet;
+
+    let commands = default_bot_commands();
+    assert!(!commands.is_empty());
+
+    let mut seen = HashSet::new();
+    for cmd in commands {
+        // Telegram API requirement: 1-32 chars, lowercase letters, numbers, underscores
+        assert!(!cmd.command.is_empty() && cmd.command.len() <= 32);
+        assert!(cmd
+            .command
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_'));
+
+        // Telegram API requirement: 1-256 chars for description
+        assert!(!cmd.description.is_empty() && cmd.description.len() <= 256);
+
+        // Unique command check
+        assert!(seen.insert(cmd.command), "Duplicate command: {}", cmd.command);
+    }
+
+    assert!(seen.contains("start"));
+    assert!(seen.contains("status"));
+    assert!(seen.contains("tokens"));
+    assert!(seen.contains("usage"));
+    assert!(seen.contains("ping"));
+    assert!(seen.contains("add"));
+    assert!(seen.contains("del"));
+
+    let json = serde_json::to_string(commands).expect("Should serialize cleanly");
+    assert!(json.contains("\"command\":\"start\""));
+    assert!(json.contains("\"description\":"));
+}

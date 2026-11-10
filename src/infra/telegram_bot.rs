@@ -10,12 +10,22 @@ pub fn start_telegram_bot_poller(state: AppState) -> tokio::task::JoinHandle<()>
     tokio::spawn(async move {
         let client = TelegramClient::new();
         let mut offset = 0i64;
+        let mut registered_token: Option<String> = None;
 
         loop {
             let settings = state.telegram.current_settings().await;
             if !settings.is_configured() {
                 tokio::time::sleep(Duration::from_secs(5)).await;
                 continue;
+            }
+
+            if registered_token.as_deref() != Some(&settings.bot_token) {
+                ensure_bot_commands_registered(
+                    &client,
+                    &settings.bot_token,
+                    &mut registered_token,
+                )
+                .await;
             }
 
             match client.get_updates(&settings.bot_token, offset, 25).await {
@@ -41,6 +51,23 @@ pub fn start_telegram_bot_poller(state: AppState) -> tokio::task::JoinHandle<()>
             }
         }
     })
+}
+
+async fn ensure_bot_commands_registered(
+    client: &TelegramClient,
+    bot_token: &str,
+    registered_token: &mut Option<String>,
+) {
+    let commands = crate::domain::telegram::default_bot_commands();
+    match client.set_my_commands(bot_token, commands).await {
+        Ok(_) => {
+            tracing::info!("Registered Telegram bot commands with Telegram API");
+            *registered_token = Some(bot_token.to_string());
+        }
+        Err(e) => {
+            tracing::warn!("Failed registering Telegram bot commands: {e:#}");
+        }
+    }
 }
 
 async fn handle_update(

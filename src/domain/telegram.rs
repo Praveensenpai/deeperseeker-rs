@@ -113,3 +113,46 @@ impl TelegramNotification {
         }
     }
 }
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TelegramBotCommand {
+    pub command: &'static str,
+    pub description: &'static str,
+}
+
+pub fn default_bot_commands() -> &'static [TelegramBotCommand] {
+    &[
+        TelegramBotCommand {
+            command: "start",
+            description: "Show help and command overview",
+        },
+        TelegramBotCommand {
+            command: "help",
+            description: "Show help and command overview",
+        },
+        TelegramBotCommand {
+            command: "status",
+            description: "Gateway & token pool health",
+        },
+        TelegramBotCommand {
+            command: "tokens",
+            description: "Detailed list of upstream tokens",
+        },
+        TelegramBotCommand {
+            command: "usage",
+            description: "Aggregated token usage analytics",
+        },
+        TelegramBotCommand {
+            command: "ping",
+            description: "Gateway connectivity & heartbeat check",
+        },
+        TelegramBotCommand {
+            command: "add",
+            description: "Verify & add new DeepSeek auth token",
+        },
+        TelegramBotCommand {
+            command: "del",
+            description: "Remove token from pool by ID",
+        },
+    ]
+}

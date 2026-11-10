@@ -59,6 +59,17 @@ pub async fn update_telegram_settings(
         return redirect_msg(&format!("Failed saving Telegram settings: {e:#}"), false);
     }
 
+    if updated.is_configured() {
+        let token = updated.bot_token.clone();
+        tokio::spawn(async move {
+            let client = TelegramClient::new();
+            let commands = crate::domain::telegram::default_bot_commands();
+            if let Err(e) = client.set_my_commands(&token, commands).await {
+                tracing::warn!("Failed registering Telegram bot commands on update: {e:#}");
+            }
+        });
+    }
+
     state.telegram.update_settings(updated).await;
     redirect_msg("Telegram settings updated successfully", true)
 }
