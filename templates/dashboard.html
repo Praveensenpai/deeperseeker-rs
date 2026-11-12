@@ -97,6 +97,13 @@
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-emerald);"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
             Active Token Pool ({{ tokens|length }})
         </h2>
+        {% set exp_count = expired_count | default(value=0) %}
+        <form method="post" action="/tokens/clear-expired" style="margin: 0;" onsubmit="return confirm('Clear {{ exp_count }} expired token(s) from the pool?')">
+            <button type="submit" class="btn-danger-outline" style="font-size: 0.8rem; padding: 0.35rem 0.75rem; display: inline-flex; align-items: center; gap: 0.35rem;" {% if exp_count == 0 %}disabled title="No expired tokens to clear"{% endif %}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                Clear Expired{% if exp_count > 0 %} ({{ exp_count }}){% endif %}
+            </button>
+        </form>
     </div>
 
     {% if tokens %}

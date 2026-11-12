@@ -1,5 +1,7 @@
 use crate::domain::token::Token;
-use crate::infra::db::{add_token as db_add, delete_token, get_tokens, init_db, open_db};
+use crate::infra::db::{
+    add_token as db_add, delete_expired_tokens, delete_token, get_tokens, init_db, open_db,
+};
 use crate::infra::deepseek_client::DeepSeekClient;
 use anyhow::{Context, Result};
 use std::time::Instant;
@@ -65,6 +67,9 @@ pub async fn list_tokens(db_path: &str) -> Result<()> {
 
 pub async fn add_token(token: &str, alias: Option<&str>, db_path: &str) -> Result<()> {
     let conn = open_db(db_path).await.context("Failed opening database")?;
+    init_db(&conn)
+        .await
+        .context("Failed initializing database")?;
     db_add(&conn, token, alias)
         .await
         .context("Failed adding token")?;
@@ -74,6 +79,9 @@ pub async fn add_token(token: &str, alias: Option<&str>, db_path: &str) -> Resul
 
 pub async fn remove_token(token_id: i64, db_path: &str) -> Result<()> {
     let conn = open_db(db_path).await.context("Failed opening database")?;
+    init_db(&conn)
+        .await
+        .context("Failed initializing database")?;
     delete_token(&conn, token_id)
         .await
         .context("Failed deleting token")?;
@@ -233,4 +241,20 @@ async fn test_single_token(
             }
         }
     }
+}
+
+pub async fn clean_expired_tokens(db_path: &str) -> Result<()> {
+    let conn = open_db(db_path).await.context("Failed opening database")?;
+    init_db(&conn)
+        .await
+        .context("Failed initializing database")?;
+    let count = delete_expired_tokens(&conn)
+        .await
+        .context("Failed cleaning expired tokens")?;
+    if count == 0 {
+        println!("No expired tokens found in database ({db_path}).");
+    } else {
+        println!("✔ Cleared {count} expired token(s) from database ({db_path})");
+    }
+    Ok(())
 }

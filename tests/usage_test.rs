@@ -185,6 +185,7 @@ fn test_dashboard_template_metrics_rendering() {
     ctx.insert("summaries", &[sample_summary_view()]);
     ctx.insert("tokens", &[sample_token_view()]);
     ctx.insert("active_count", &1);
+    ctx.insert("expired_count", &0);
     ctx.insert("total_tokens_count", &1);
     ctx.insert("in_flight", &0);
     ctx.insert("cache_hit_rate", &"89.1%");

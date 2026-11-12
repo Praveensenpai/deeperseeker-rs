@@ -131,6 +131,7 @@ pub async fn show_dashboard(
         .await
         .unwrap_or_default();
     let active_count = tokens.iter().filter(|t| t.is_active()).count();
+    let expired_count = tokens.iter().filter(|t| t.is_expired()).count();
     let in_flight_map = state.in_flight.lock().await;
     let in_flight_count: usize = in_flight_map.values().sum();
 
@@ -153,6 +154,7 @@ pub async fn show_dashboard(
     ctx.insert("client_keys", &client_key_views);
     ctx.insert("summaries", &summary_views);
     ctx.insert("active_count", &active_count);
+    ctx.insert("expired_count", &expired_count);
     ctx.insert("total_tokens_count", &views.len());
     ctx.insert("in_flight", &in_flight_count);
     ctx.insert("cache_hit_rate", &cache_hit_rate);

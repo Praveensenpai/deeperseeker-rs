@@ -316,3 +316,41 @@ async fn verify_probes_upstream_and_updates_status() {
         "valid PoW must verify: {body}"
     );
 }
+
+#[tokio::test]
+async fn clear_expired_tokens_endpoint() {
+    let (base, db) = spawn_server("clear_expired", "http://127.0.0.1:1").await;
+    let auth = format!("Bearer {MASTER_KEY}");
+
+    add_token(&db, "eyJ-active-token", Some("active"))
+        .await
+        .expect("add active");
+    add_token(&db, "eyJ-expired-token", Some("expired"))
+        .await
+        .expect("add expired");
+
+    let tokens = get_tokens(&db).await.expect("tokens");
+    let expired_id = tokens
+        .iter()
+        .find(|t| t.alias.as_deref() == Some("expired"))
+        .unwrap()
+        .id;
+    deeperseeker::infra::db::mark_expired(&db, expired_id)
+        .await
+        .expect("mark expired");
+
+    let resp = client()
+        .post(format!("{base}/api/admin/tokens/clear-expired"))
+        .header("Authorization", &auth)
+        .send()
+        .await
+        .expect("request");
+    assert_eq!(resp.status(), 200);
+    let body = json_body(resp).await;
+    assert_eq!(body["status"], "ok");
+    assert_eq!(body["cleared_count"], 1);
+
+    let remaining = get_tokens(&db).await.expect("tokens");
+    assert_eq!(remaining.len(), 1);
+    assert_eq!(remaining[0].alias.as_deref(), Some("active"));
+}

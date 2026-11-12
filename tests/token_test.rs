@@ -144,3 +144,38 @@ async fn test_usage_clears_on_delete_not_edit() {
     assert!(get_token_usages(&db).await.unwrap().is_empty());
     assert!(get_tokens(&db).await.unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn test_db_delete_expired_tokens() {
+    use deeperseeker::infra::db::{delete_expired_tokens, mark_expired};
+    use deeperseeker::infra::usage_db::{get_token_usages, record_usage};
+
+    let db = open_db(":memory:").await.unwrap();
+    init_db(&db).await.unwrap();
+
+    add_token(&db, "tok-active", Some("active")).await.unwrap();
+    add_token(&db, "tok-expired-1", Some("exp1")).await.unwrap();
+    add_token(&db, "tok-expired-2", Some("exp2")).await.unwrap();
+
+    mark_expired(&db, 2).await.unwrap();
+    mark_expired(&db, 3).await.unwrap();
+
+    record_usage(&db, "deepseek-chat", 10, 20, 5, Some(1))
+        .await
+        .unwrap();
+    record_usage(&db, "deepseek-chat", 10, 20, 5, Some(2))
+        .await
+        .unwrap();
+
+    let cleared = delete_expired_tokens(&db).await.unwrap();
+    assert_eq!(cleared, 2);
+
+    let remaining = get_tokens(&db).await.unwrap();
+    assert_eq!(remaining.len(), 1);
+    assert_eq!(remaining[0].id, 1);
+    assert_eq!(remaining[0].alias.as_deref(), Some("active"));
+
+    let usages = get_token_usages(&db).await.unwrap();
+    assert_eq!(usages.len(), 1);
+    assert_eq!(usages[0].token_id, 1);
+}

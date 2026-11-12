@@ -5,7 +5,8 @@ use deeperseeker::api::state::AppState;
 use deeperseeker::cli::diagnostic::run_diagnostics;
 use deeperseeker::cli::service::{install_user_service, service_status, uninstall_user_service};
 use deeperseeker::cli::token_cmd::{
-    add_token, edit_token, list_tokens, remove_token, reset_token_usage, test_tokens,
+    add_token, clean_expired_tokens, edit_token, list_tokens, remove_token, reset_token_usage,
+    test_tokens,
 };
 use deeperseeker::cli::usage_cmd::display_usage;
 use deeperseeker::cli::{
@@ -88,6 +89,10 @@ async fn handle_token(args: TokenArgs) -> Result<()> {
         TokenSubcommands::Test { id, db } => {
             let db_path = deeperseeker::infra::assets::resolve_db_path(db.as_deref());
             test_tokens(id, &db_path).await
+        }
+        TokenSubcommands::Clean { db } => {
+            let db_path = deeperseeker::infra::assets::resolve_db_path(db.as_deref());
+            clean_expired_tokens(&db_path).await
         }
     }
 }

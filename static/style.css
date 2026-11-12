@@ -443,6 +443,12 @@ table.data-table tr:hover td {
     border-color: var(--accent-rose);
 }
 
+.btn-danger-outline:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    border-color: rgba(244, 63, 94, 0.2);
+}
+
 /* Auth card */
 .auth-wrapper {
     display: flex;

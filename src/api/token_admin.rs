@@ -3,9 +3,9 @@
 use crate::api::dashboard::{is_authenticated, redirect_msg};
 use crate::api::state::AppState;
 use crate::infra::db::{
-    add_token as db_add_token, delete_token as db_delete_token, get_token as db_get_token,
-    mark_active as db_mark_active, mark_expired as db_mark_expired,
-    update_token as db_update_token,
+    add_token as db_add_token, delete_expired_tokens as db_delete_expired_tokens,
+    delete_token as db_delete_token, get_token as db_get_token, mark_active as db_mark_active,
+    mark_expired as db_mark_expired, update_token as db_update_token,
 };
 use axum::{
     extract::{Form, Path, State},
@@ -74,6 +74,21 @@ pub async fn delete_token(
 
     let _ = db_delete_token(&state.db, token_id).await;
     Redirect::to("/dashboard").into_response()
+}
+
+pub async fn clear_expired_tokens(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    if !is_authenticated(&state, &headers) {
+        return Redirect::to("/login").into_response();
+    }
+
+    match db_delete_expired_tokens(&state.db).await {
+        Ok(0) => redirect_msg("No expired tokens to clear", true),
+        Ok(count) => redirect_msg(&format!("Cleared {count} expired token(s)"), true),
+        Err(err) => {
+            tracing::error!("Failed to clear expired tokens: {err:#}");
+            redirect_msg("Failed to clear expired tokens", false)
+        }
+    }
 }
 
 pub async fn edit_token(

@@ -15,7 +15,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
 
 ## 3. Module & Interface Skeleton
 
-### `src/api/admin.rs` (Role: api, Lines: 325)
+### `src/api/admin.rs` (Role: api, Lines: 336)
 - **Responsibility**: Core api logic in src/api/admin.rs
 - **Imports**: use crate :: api :: state :: AppState , use crate :: api :: token_admin :: verify_upstream , use crate :: domain :: token :: Token , use crate :: domain :: usage :: TokenUsage , use crate :: infra :: db :: { add_token as db_add_token , delete_token as db_delete_token , get_token as db_get_token , get_tokens , mark_active as db_mark_active , mark_expired as db_mark_expired , reset_token_usage as db_reset_token_usage , update_token as db_update_token , } , use crate :: infra :: usage_db :: get_token_usages , use axum :: { extract :: { Path , Request , State } , http :: { header :: AUTHORIZATION , StatusCode } , middleware :: Next , response :: { IntoResponse , Response } , Json , } , use serde :: { Deserialize , Serialize } , use serde_json :: json , use std :: collections :: HashMap 
 - **Types & Enums**:
@@ -34,6 +34,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn add_token (State (state) : State < AppState > , Json (body) : Json < AddTokenBody >) -> ApiResult
   async fn update_token (State (state) : State < AppState > , Path (id) : Path < i64 > , Json (body) : Json < UpdateTokenBody > ,) -> ApiResult
   async fn delete_token (State (state) : State < AppState > , Path (id) : Path < i64 >) -> ApiResult
+  async fn clear_expired_tokens (State (state) : State < AppState >) -> ApiResult
   async fn verify_token (State (state) : State < AppState > , Path (id) : Path < i64 >) -> ApiResult
   async fn reset_token (State (state) : State < AppState > , Path (id) : Path < i64 >) -> ApiResult
   async fn set_status (State (state) : State < AppState > , Path (id) : Path < i64 > , Json (body) : Json < StatusBody > ,) -> ApiResult
@@ -115,7 +116,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn delete_client_key (State (state) : State < AppState > , headers : HeaderMap , Path (id) : Path < i64 > ,) -> Response
   ```
 
-### `src/api/dashboard.rs` (Role: api, Lines: 342)
+### `src/api/dashboard.rs` (Role: api, Lines: 344)
 - **Responsibility**: Core api logic in src/api/dashboard.rs
 - **Imports**: use crate :: api :: state :: AppState , use crate :: domain :: client_key :: ClientKey , use crate :: domain :: token :: Token , use crate :: domain :: usage :: { format_metric , TokenUsage } , use crate :: infra :: client_keys :: { list_client_keys , window_usage_tokens } , use crate :: infra :: db :: { get_tokens , now_timestamp } , use axum :: { extract :: { Form , Query , State } , http :: { header :: { COOKIE , SET_COOKIE } , HeaderMap , StatusCode , } , response :: { Html , IntoResponse , Redirect , Response } , } , use serde :: { Deserialize , Serialize } , use sha2 :: { Digest , Sha256 } , use std :: collections :: HashMap , use tera :: Context 
 - **Types & Enums**:
@@ -244,9 +245,9 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn test_telegram_notification (State (state) : State < AppState > , headers : HeaderMap ,) -> Response
   ```
 
-### `src/api/token_admin.rs` (Role: api, Lines: 177)
+### `src/api/token_admin.rs` (Role: api, Lines: 192)
 - **Responsibility**: Core api logic in src/api/token_admin.rs
-- **Imports**: use crate :: api :: dashboard :: { is_authenticated , redirect_msg } , use crate :: api :: state :: AppState , use crate :: infra :: db :: { add_token as db_add_token , delete_token as db_delete_token , get_token as db_get_token , mark_active as db_mark_active , mark_expired as db_mark_expired , update_token as db_update_token , } , use axum :: { extract :: { Form , Path , State } , http :: HeaderMap , response :: { IntoResponse , Redirect , Response } , } , use serde :: Deserialize 
+- **Imports**: use crate :: api :: dashboard :: { is_authenticated , redirect_msg } , use crate :: api :: state :: AppState , use crate :: infra :: db :: { add_token as db_add_token , delete_expired_tokens as db_delete_expired_tokens , delete_token as db_delete_token , get_token as db_get_token , mark_active as db_mark_active , mark_expired as db_mark_expired , update_token as db_update_token , } , use axum :: { extract :: { Form , Path , State } , http :: HeaderMap , response :: { IntoResponse , Redirect , Response } , } , use serde :: Deserialize 
 - **Types & Enums**:
   ```rust
   pub struct AddTokenForm
@@ -256,6 +257,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   ```rust
   async fn add_token (State (state) : State < AppState > , headers : HeaderMap , Form (form) : Form < AddTokenForm > ,) -> Response
   async fn delete_token (State (state) : State < AppState > , headers : HeaderMap , Path (token_id) : Path < i64 > ,) -> Response
+  async fn clear_expired_tokens (State (state) : State < AppState > , headers : HeaderMap) -> Response
   async fn edit_token (State (state) : State < AppState > , headers : HeaderMap , Path (token_id) : Path < i64 > , Form (form) : Form < EditTokenForm > ,) -> Response
   async fn verify_token (State (state) : State < AppState > , headers : HeaderMap , Path (token_id) : Path < i64 > ,) -> Response
   ```
@@ -272,9 +274,9 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn get_usage_metrics (State (state) : State < AppState > , Query (query) : Query < UsageQuery > ,) -> impl IntoResponse
   ```
 
-### `src/api.rs` (Role: api, Lines: 113)
+### `src/api.rs` (Role: api, Lines: 121)
 - **Responsibility**: Core api logic in src/api.rs
-- **Imports**: use crate :: api :: admin :: { add_token as admin_add_token , delete_token as admin_delete_token , get_pool , get_token as admin_get_token , list_tokens as admin_list_tokens , require_admin_key , reset_token as admin_reset_token , set_status as admin_set_status , update_token as admin_update_token , verify_token as admin_verify_token , } , use crate :: api :: anthropic :: anthropic_messages , use crate :: api :: chat :: chat_completions , use crate :: api :: client_key_admin :: { add_client_key , delete_client_key , revoke_client_key } , use crate :: api :: dashboard :: { logout , show_dashboard , show_login , submit_login } , use crate :: api :: files :: { upload_file_anthropic , upload_file_openai } , use crate :: api :: health :: { health , root } , use crate :: api :: logs :: { get_logs , stream_logs } , use crate :: api :: metrics :: get_metrics , use crate :: api :: middleware :: require_api_key , use crate :: api :: models :: list_models , use crate :: api :: state :: AppState , use crate :: api :: telegram_admin :: { test_telegram_notification , update_telegram_settings } , use crate :: api :: token_admin :: { add_token , delete_token , edit_token , verify_token } , use crate :: api :: usage :: get_usage_metrics , use axum :: { extract :: DefaultBodyLimit , middleware :: from_fn_with_state , routing :: { get , post } , Router , } , use tower_http :: cors :: CorsLayer , use tower_http :: services :: ServeDir 
+- **Imports**: use crate :: api :: admin :: { add_token as admin_add_token , clear_expired_tokens as admin_clear_expired_tokens , delete_token as admin_delete_token , get_pool , get_token as admin_get_token , list_tokens as admin_list_tokens , require_admin_key , reset_token as admin_reset_token , set_status as admin_set_status , update_token as admin_update_token , verify_token as admin_verify_token , } , use crate :: api :: anthropic :: anthropic_messages , use crate :: api :: chat :: chat_completions , use crate :: api :: client_key_admin :: { add_client_key , delete_client_key , revoke_client_key } , use crate :: api :: dashboard :: { logout , show_dashboard , show_login , submit_login } , use crate :: api :: files :: { upload_file_anthropic , upload_file_openai } , use crate :: api :: health :: { health , root } , use crate :: api :: logs :: { get_logs , stream_logs } , use crate :: api :: metrics :: get_metrics , use crate :: api :: middleware :: require_api_key , use crate :: api :: models :: list_models , use crate :: api :: state :: AppState , use crate :: api :: telegram_admin :: { test_telegram_notification , update_telegram_settings } , use crate :: api :: token_admin :: { add_token , clear_expired_tokens , delete_token , edit_token , verify_token , } , use crate :: api :: usage :: get_usage_metrics , use axum :: { extract :: DefaultBodyLimit , middleware :: from_fn_with_state , routing :: { get , post } , Router , } , use tower_http :: cors :: CorsLayer , use tower_http :: services :: ServeDir 
 - **Public Functions & Signatures**:
   ```rust
   fn build_router (state : AppState) -> Router
@@ -298,9 +300,9 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   fn service_status () -> Result < () >
   ```
 
-### `src/cli/token_cmd.rs` (Role: cli, Lines: 236)
+### `src/cli/token_cmd.rs` (Role: cli, Lines: 260)
 - **Responsibility**: Core cli logic in src/cli/token_cmd.rs
-- **Imports**: use crate :: domain :: token :: Token , use crate :: infra :: db :: { add_token as db_add , delete_token , get_tokens , init_db , open_db } , use crate :: infra :: deepseek_client :: DeepSeekClient , use anyhow :: { Context , Result } , use std :: time :: Instant 
+- **Imports**: use crate :: domain :: token :: Token , use crate :: infra :: db :: { add_token as db_add , delete_expired_tokens , delete_token , get_tokens , init_db , open_db , } , use crate :: infra :: deepseek_client :: DeepSeekClient , use anyhow :: { Context , Result } , use std :: time :: Instant 
 - **Public Functions & Signatures**:
   ```rust
   async fn list_tokens (db_path : & str) -> Result < () >
@@ -309,6 +311,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn edit_token (token_id : i64 , new_token : Option < & str > , alias : Option < & str > , db_path : & str ,) -> Result < () >
   async fn reset_token_usage (token_id : i64 , db_path : & str) -> Result < () >
   async fn test_tokens (target_id : Option < i64 > , db_path : & str) -> Result < () >
+  async fn clean_expired_tokens (db_path : & str) -> Result < () >
   ```
 
 ### `src/cli/update.rs` (Role: cli, Lines: 160)
@@ -331,7 +334,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn display_usage (args : UsageViewArgs) -> Result < () >
   ```
 
-### `src/cli.rs` (Role: cli, Lines: 185)
+### `src/cli.rs` (Role: cli, Lines: 190)
 - **Responsibility**: Core cli logic in src/cli.rs
 - **Imports**: use clap :: { Args , Parser , Subcommand } 
 - **Types & Enums**:
@@ -549,7 +552,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn window_usage_tokens (conn : & Connection , client_key_id : i64 , window_secs : u64 ,) -> Result < u64 >
   ```
 
-### `src/infra/db.rs` (Role: infra, Lines: 384)
+### `src/infra/db.rs` (Role: infra, Lines: 389)
 - **Responsibility**: Core infra logic in src/infra/db.rs
 - **Imports**: use crate :: domain :: token :: Token , use anyhow :: { Context , Result } , use rusqlite :: params , use std :: collections :: HashMap , use std :: time :: { SystemTime , UNIX_EPOCH } , use tokio_rusqlite :: Connection 
 - **Public Functions & Signatures**:
@@ -563,6 +566,7 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
   async fn get_tokens (conn : & Connection) -> Result < Vec < Token > >
   async fn get_token (conn : & Connection , token_id : i64) -> Result < Option < Token > >
   async fn delete_token (conn : & Connection , token_id : i64) -> Result < () >
+  async fn delete_expired_tokens (conn : & Connection) -> Result < usize >
   async fn mark_limited (conn : & Connection , token_id : i64 , cooldown_secs : u64) -> Result < () >
   async fn mark_active (conn : & Connection , token_id : i64) -> Result < () >
   async fn mark_expired (conn : & Connection , token_id : i64) -> Result < () >
@@ -819,9 +823,9 @@ Entrypoint ──> CLI/Parser ──> Domain Logic ──> Infra/IO
 ### `src/lib.rs` (Role: general, Lines: 6)
 - **Responsibility**: Core general logic in src/lib.rs
 
-### `src/main.rs` (Role: general, Lines: 227)
+### `src/main.rs` (Role: general, Lines: 232)
 - **Responsibility**: Core general logic in src/main.rs
-- **Imports**: use anyhow :: { Context , Result } , use clap :: Parser , use deeperseeker :: api :: build_router , use deeperseeker :: api :: state :: AppState , use deeperseeker :: cli :: diagnostic :: run_diagnostics , use deeperseeker :: cli :: service :: { install_user_service , service_status , uninstall_user_service } , use deeperseeker :: cli :: token_cmd :: { add_token , edit_token , list_tokens , remove_token , reset_token_usage , test_tokens , } , use deeperseeker :: cli :: usage_cmd :: display_usage , use deeperseeker :: cli :: { Cli , Commands , ServeArgs , ServiceArgs , ServiceSubcommands , TokenArgs , TokenSubcommands , UpdateArgs , } , use deeperseeker :: config :: AppConfig , use deeperseeker :: infra :: db :: { init_db , open_db } , use deeperseeker :: infra :: deepseek_client :: DeepSeekClient , use deeperseeker :: infra :: pow :: PowSolver , use deeperseeker :: tui :: run_status , use std :: collections :: HashMap , use std :: sync :: Arc , use tera :: Tera , use tokio :: net :: TcpListener , use tokio :: sync :: Mutex , use tracing :: info 
+- **Imports**: use anyhow :: { Context , Result } , use clap :: Parser , use deeperseeker :: api :: build_router , use deeperseeker :: api :: state :: AppState , use deeperseeker :: cli :: diagnostic :: run_diagnostics , use deeperseeker :: cli :: service :: { install_user_service , service_status , uninstall_user_service } , use deeperseeker :: cli :: token_cmd :: { add_token , clean_expired_tokens , edit_token , list_tokens , remove_token , reset_token_usage , test_tokens , } , use deeperseeker :: cli :: usage_cmd :: display_usage , use deeperseeker :: cli :: { Cli , Commands , ServeArgs , ServiceArgs , ServiceSubcommands , TokenArgs , TokenSubcommands , UpdateArgs , } , use deeperseeker :: config :: AppConfig , use deeperseeker :: infra :: db :: { init_db , open_db } , use deeperseeker :: infra :: deepseek_client :: DeepSeekClient , use deeperseeker :: infra :: pow :: PowSolver , use deeperseeker :: tui :: run_status , use std :: collections :: HashMap , use std :: sync :: Arc , use tera :: Tera , use tokio :: net :: TcpListener , use tokio :: sync :: Mutex , use tracing :: info 
 
 ### `src/tui/tabs.rs` (Role: tui, Lines: 343)
 - **Responsibility**: Core tui logic in src/tui/tabs.rs

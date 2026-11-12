@@ -93,29 +93,14 @@ pub async fn init_db(conn: &Connection) -> Result<()> {
         // freshly added token never reuses a deleted token's ID (and thus its
         // usage history), even after the tokens table becomes empty.
         let _ = c.execute(
-            "INSERT OR IGNORE INTO meta (key, value)
-             SELECT 'next_token_id', COALESCE(MAX(id), 0) + 1 FROM tokens",
+            "INSERT OR IGNORE INTO meta (key, value) SELECT 'next_token_id', COALESCE(MAX(id), 0) + 1 FROM tokens",
             [],
         );
+        let _ = c.execute("ALTER TABLE request_usage ADD COLUMN cached_tokens INTEGER DEFAULT 0", []);
+        let _ = c.execute("ALTER TABLE request_usage ADD COLUMN client_key_id INTEGER", []);
+        let _ = c.execute("CREATE INDEX IF NOT EXISTS idx_usage_client_key_ts ON request_usage(client_key_id, timestamp)", []);
         let _ = c.execute(
-            "ALTER TABLE request_usage ADD COLUMN cached_tokens INTEGER DEFAULT 0",
-            [],
-        );
-        let _ = c.execute(
-            "ALTER TABLE request_usage ADD COLUMN client_key_id INTEGER",
-            [],
-        );
-        let _ = c.execute(
-            "CREATE INDEX IF NOT EXISTS idx_usage_client_key_ts ON request_usage(client_key_id, timestamp)",
-            [],
-        );
-        // Cascade semantics for tokens deleted before this cleanup existed:
-        // drop usage rows whose owning token is gone (AUTOINCREMENT never
-        // reuses their IDs, so these can never be re-attributed).
-        let _ = c.execute(
-            "DELETE FROM request_usage
-             WHERE token_id IS NOT NULL
-               AND token_id NOT IN (SELECT id FROM tokens)",
+            "DELETE FROM request_usage WHERE token_id IS NOT NULL AND token_id NOT IN (SELECT id FROM tokens)",
             [],
         );
         Ok(())
@@ -275,6 +260,26 @@ pub async fn delete_token(conn: &Connection, token_id: i64) -> Result<()> {
     .await
     .context("Failed to delete token")?;
     Ok(())
+}
+
+pub async fn delete_expired_tokens(conn: &Connection) -> Result<usize> {
+    conn.call(|c| {
+        c.execute(
+            "DELETE FROM sessions WHERE token_id IN (SELECT id FROM tokens WHERE status IN ('EXPIRED', 'SUSPENDED'))",
+            [],
+        )?;
+        c.execute(
+            "DELETE FROM request_usage WHERE token_id IN (SELECT id FROM tokens WHERE status IN ('EXPIRED', 'SUSPENDED'))",
+            [],
+        )?;
+        let count = c.execute(
+            "DELETE FROM tokens WHERE status IN ('EXPIRED', 'SUSPENDED')",
+            [],
+        )?;
+        Ok(count)
+    })
+    .await
+    .context("Failed to delete expired tokens")
 }
 
 pub async fn mark_limited(conn: &Connection, token_id: i64, cooldown_secs: u64) -> Result<()> {

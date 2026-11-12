@@ -207,6 +207,17 @@ pub async fn delete_token(State(state): State<AppState>, Path(id): Path<i64>) ->
     Ok(Json(json!({ "status": "ok", "message": "Token deleted" })))
 }
 
+pub async fn clear_expired_tokens(State(state): State<AppState>) -> ApiResult {
+    let count = crate::infra::db::delete_expired_tokens(&state.db)
+        .await
+        .map_err(|e| internal(&e.to_string()))?;
+    Ok(Json(json!({
+        "status": "ok",
+        "message": format!("Cleared {count} expired token(s)"),
+        "cleared_count": count
+    })))
+}
+
 pub async fn verify_token(State(state): State<AppState>, Path(id): Path<i64>) -> ApiResult {
     let token = fetch_token(&state, id).await?;
     if verify_upstream(&state, &token.token).await {

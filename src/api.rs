@@ -20,10 +20,11 @@ pub mod token_admin;
 pub mod usage;
 
 use crate::api::admin::{
-    add_token as admin_add_token, delete_token as admin_delete_token, get_pool,
-    get_token as admin_get_token, list_tokens as admin_list_tokens, require_admin_key,
-    reset_token as admin_reset_token, set_status as admin_set_status,
-    update_token as admin_update_token, verify_token as admin_verify_token,
+    add_token as admin_add_token, clear_expired_tokens as admin_clear_expired_tokens,
+    delete_token as admin_delete_token, get_pool, get_token as admin_get_token,
+    list_tokens as admin_list_tokens, require_admin_key, reset_token as admin_reset_token,
+    set_status as admin_set_status, update_token as admin_update_token,
+    verify_token as admin_verify_token,
 };
 use crate::api::anthropic::anthropic_messages;
 use crate::api::chat::chat_completions;
@@ -37,7 +38,9 @@ use crate::api::middleware::require_api_key;
 use crate::api::models::list_models;
 use crate::api::state::AppState;
 use crate::api::telegram_admin::{test_telegram_notification, update_telegram_settings};
-use crate::api::token_admin::{add_token, delete_token, edit_token, verify_token};
+use crate::api::token_admin::{
+    add_token, clear_expired_tokens, delete_token, edit_token, verify_token,
+};
 use crate::api::usage::get_usage_metrics;
 use axum::{
     extract::DefaultBodyLimit,
@@ -75,6 +78,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/admin/tokens/{id}/verify", post(admin_verify_token))
         .route("/api/admin/tokens/{id}/reset", post(admin_reset_token))
         .route("/api/admin/tokens/{id}/status", post(admin_set_status))
+        .route(
+            "/api/admin/tokens/clear-expired",
+            post(admin_clear_expired_tokens),
+        )
         .route_layer(from_fn_with_state(state.clone(), require_admin_key));
 
     let public_routes = Router::new()
@@ -91,6 +98,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/logs", get(get_logs))
         .route("/api/logs/stream", get(stream_logs))
         .route("/tokens/add", post(add_token))
+        .route("/tokens/clear-expired", post(clear_expired_tokens))
         .route("/tokens/{token_id}/edit", post(edit_token))
         .route("/tokens/{token_id}/verify", post(verify_token))
         .route("/tokens/{token_id}/delete", post(delete_token))

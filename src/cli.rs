@@ -123,6 +123,11 @@ pub enum TokenSubcommands {
         #[arg(short = 'd', long)]
         db: Option<String>,
     },
+    /// Clear all expired or suspended tokens from the pool
+    Clean {
+        #[arg(short = 'd', long)]
+        db: Option<String>,
+    },
 }
 
 #[derive(Args, Debug)]
